@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Sidi Runner : le couscous de Maman - Youssef Kalai</title>
+<style>
+  :root { --ink:#0f2a44; --wash:#8ec5e8; --gold:#f2b632; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--ink); font-family:"Trebuchet MS",Verdana,sans-serif; color:#fff; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:8px; }
+  canvas { width:100%; max-width:960px; aspect-ratio:16/9; background:#bfe3f7; border:4px solid #f6f6f0; border-radius:6px;
+           image-rendering:pixelated; image-rendering:crisp-edges; touch-action:none; }
+  .help { font-size:14px; opacity:.85; text-align:center; }
+  .pad { display:none; width:100%; max-width:960px; justify-content:space-between; }
+  .pad div { display:flex; gap:10px; }
+  .pad button { width:76px; height:64px; font-size:28px; border:0; border-radius:14px; background:var(--wash); color:var(--ink); font-weight:bold; }
+  .pad button:active { background:var(--gold); }
+  @media (pointer:coarse) { .pad { display:flex; } .help { display:none; } }
+</style>
+</head>
+<body>
+<canvas id="c" width="480" height="270"></canvas>
+<div class="help">Flèches ou WASD pour bouger · Espace / ↑ pour sauter · Entrée pour valider · M : son<br>Un jeu de Youssef Kalai</div>
+<div class="pad">
+  <div><button id="bl">◀</button><button id="br">▶</button></div>
+  <div><button id="bj">▲</button></div>
+</div>
+
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const W = 480, H = 270, STREET = 250;
+const G = 0.3, SPEED = 2.5, JUMP = 6.5, MAXP = 3;
+
+/* ---------- Niveaux : chaque maison = [largeur, hauteur du toit, écart avant la suivante] ---------- */
+const LEVELS = [
+  { name:"Ruelle blanche",
+    houses:[[140,170,45],[90,160,50],[110,150,55],[80,170,50],[120,140,55],[90,150,60],[130,170,55],[100,150,50],[150,160,0]],
+    gulls:[4], cacti:[] },
+  { name:"Terrasses bleues",
+    houses:[[120,180,55],[80,165,60],[70,140,65],[90,120,60],[70,140,70],[100,165,65],[70,150,70],[90,130,60],[80,155,70],[70,175,60],[150,160,0]],
+    gulls:[3,7], cacti:[[5,40]] },
+  { name:"Le quartier de Maman",
+    houses:[[110,180,60],[70,160,75],[60,135,70],[70,115,70],[60,140,80],[80,165,75],[60,145,70],[70,120,75],[60,100,70],[70,130,80],[80,160,70],[60,140,80],[70,170,75],[160,150,0]],
+    gulls:[2,5,8,11], cacti:[[5,30],[10,40]] }
+];
+
+/* ---------- Sprites pixel art (16×24) ---------- */
+const BODY = [
+"................",".....FFFFFF.....","....FFFFFFFF....","....FFFFFFFF.T..","....ffffffff.T..","....SSSSSSSS.T..",
+"....SSMSSMSS.T..","....SSSSSSSSS...","....SMMMMMMMS...",".....SSSSSSS....","....WWWGGWWW....","...WWWWGGWWWW...",
+"..WWWWWGWWWWWW..","..WWWWwGwWWWWW..","..SWWWwGwWWWWS..","...WWWWGWWWWW...","....WWWGWWWW....","....WWWGWWWW....","....GGGGGGGG...."];
+const LEGS = [[
+"....PPP..PPP....","....PPP..PPP....","....PPP..PPP....","....BBB..BBB....","...BBBB..BBBB..."],[
+"...PPP...PPP....","...PPP....PPP...","..PPP......PPP..","..BBB......BBB..",".BBBB......BBBB."]];
+const FRAMES = LEGS.map(l => BODY.concat(l).map(r => r.padEnd(16,'.')));
+// Nour : cheveux longs, nœud rose, cils, lèvres et robe évasée
+const GBODY = [
+"................",".....RRRRRR.....","....RRrrrrRRKK..","...RRRRRRRRRKK..","...RRRSSSSRRR...","...RRSSSSSSRR...",
+"...RRSMSSMSRR...","...RRSSSSSSRR...","...RRSSLLSSRR...","...RRRSSSSRRR...","...RRWWGGWWRR...","...RWWWWWWWWR...",
+"...RWWWGGWWWR...","..SWWWWGGWWWWS..","...WWWWGGWWWW...","..WWWWWGGWWWWW..",".WWWWWWGGWWWWWW.",".WWWWWWWWWWWWWW.",".GGGGGGGGGGGGGG."];
+const GFRAMES = LEGS.map(l => GBODY.concat(l).map(r => r.padEnd(16,'.')));
+function FR(name, k){ return (name === 'Nour' ? GFRAMES : name === 'Tata' ? TFRAMES : FRAMES)[k]; }
+
+const MOM0 = [
+"................",".....HHHHHH.....","....HHHHHHHH....","....HHHHHHHHH...","....HSSSSSSHH...","....HSMSSMSHH...",
+"....HSSSSSSHH...","....HSSSMSSHH...",".....HSSSSHH....","....HHHHHHHH....","...DDDDGGDDDD...","..DDDDDGGDDDDD..",
+"..SDDDDGDDDDDS..","..DDDDDGDDDDDD..","..DDDDDGDDDDDD..","...DDDDGDDDDD...","...DDDDGDDDDD...","...DDDDGDDDDD...",
+"...GGGGGGGGGG...","....DDDDDDDD....","....DDDDDDDD....","....DDDDDDDD....","....BB....BB....","...BBB....BBB..."];
+const MOM1 = MOM0.slice();
+MOM1[6] = "....HSSSSSSHH.S."; MOM1[7] = "....HSSSMSSHH.S."; MOM1[8] = ".....HSSSSHH..S.";
+MOM1[9] = "....HHHHHHHH.D.."; MOM1[12] = "..SDDDDGDDDDD...";
+const MOMF = [MOM0, MOM1];
+const TFRAMES = [MOM0, MOM0.slice(0,22).concat(["...BB......BB...","..BBB......BBB.."])];
+
+const BASE_PAL = { S:"#e8b48a", M:"#2b1a12", P:"#2d3748", B:"#1a202c", T:"#111111", G:"#d4a017" };
+const PALS = {
+  Ahmed:   { ...BASE_PAL, F:"#c8102e", f:"#8f0a20", W:"#f3ead2", w:"#d8ccae" },
+  Yassine: { ...BASE_PAL, F:"#b91c1c", f:"#7f1414", W:"#5fb0e6", w:"#3a86bb" },
+  Nour:    { S:"#e8b48a", M:"#2b1a12", R:"#4a2511", r:"#7a4426", K:"#ff5fa2", L:"#d64580", W:"#f5a6c6", w:"#d99ab5", G:"#d4a017", P:"#3b2a4a", B:"#c2185b" },
+  Maman:   { S:"#e0a878", M:"#2b1a12", H:"#f6f6f0", D:"#1f5fa6", G:"#f2b632", B:"#1a202c" },
+  Tata:    { S:"#e0a878", M:"#2b1a12", H:"#f2b632", D:"#7c3aed", G:"#f6f6f0", B:"#1a202c" }
+};
+PALS.MamanAngry = { ...PALS.Maman, S:"#e8604f" };
+PALS.TataAngry  = { ...PALS.Tata,  S:"#e8604f" };
+PALS.Papa     = { ...BASE_PAL, M:"#9aa0a6", F:"#8b1a1a", f:"#5c1010", W:"#c9a26b", w:"#a67c47", G:"#7a4a2a" };
+PALS.PapaAngry = { ...PALS.Papa, S:"#e8604f" };
+PALS.Facteur  = { ...BASE_PAL, T:null, F:"#f2b632", f:"#c98f10", W:"#3b82f6", w:"#2563b8", G:"#f2b632" };
+PALS.Police   = { ...BASE_PAL, T:null, F:"#1e3a8a", f:"#0f2560", W:"#4a6fd4", w:"#2f4fa8", G:"#f2b632" };
+function sprite(x, y, pal, dir, rows){
+  const ox = Math.round(x) - 2, oy = Math.round(y);
+  for (let r = 0; r < rows.length; r++)
+    for (let c = 0; c < 16; c++){
+      const ch = rows[r][c]; if (ch === '.') continue;
+      const col = pal[ch]; if (!col) continue;
+      ctx.fillStyle = col; ctx.fillRect(ox + (dir >= 0 ? c : 15 - c), oy + r, 1, 1);
+    }
+}
+
+/* ---------- Utilitaires ---------- */
+function hh(n){ n = (n*374761393 + 668265263)|0; n = Math.imul(n ^ (n>>>13), 1274126177); return ((n ^ (n>>>16))>>>0)/4294967296; }
+function rect(x,y,w,h,c){ ctx.fillStyle = c; ctx.fillRect(Math.round(x),Math.round(y),w,h); }
+function txt(s, x, y, size, color, align){
+  ctx.font = `bold ${size}px "Courier New",monospace`; ctx.textAlign = align || "left";
+  ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = "#0f2a44"; ctx.strokeText(s, Math.round(x), Math.round(y));
+  ctx.fillStyle = color || "#fff"; ctx.fillText(s, Math.round(x), Math.round(y));
+}
+function overlap(a, b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+/* ---------- Couscous ---------- */
+function bowl(cx, by, n){
+  cx = Math.round(cx); by = Math.round(by);
+  rect(cx-7, by, 14, 3, "#8b5a2b"); rect(cx-8, by-1, 16, 1, "#b57a3a"); rect(cx-6, by+3, 12, 1, "#6b431f");
+  const rows = [12,10,8,5], cnt = n >= 3 ? 4 : n === 2 ? 3 : n === 1 ? 2 : 0;
+  for (let i = 0; i < cnt; i++) rect(cx - rows[i]/2, by-2-i, rows[i], 1, "#f3d58a");
+  if (cnt){
+    rect(cx-3, by-3, 1, 1, "#e0b84f"); rect(cx+2, by-2, 1, 1, "#e0b84f");
+    rect(cx-5, by-2, 2, 1, "#e8772e"); rect(cx+3, by-3, 1, 1, "#c9a35a");
+    rect(cx-1, by-2-cnt, 2, 1, "#a34a2c");
+    rect(cx-2 + Math.round(Math.sin(tick/10)*2), by-4-cnt-((tick>>3)%4), 1, 1, "rgba(255,255,255,.85)");
+  }
+}
+function heart(x, y, c){
+  rect(x+1,y,2,1,c); rect(x+4,y,2,1,c); rect(x,y+1,7,2,c); rect(x+1,y+3,5,1,c); rect(x+2,y+4,3,1,c); rect(x+3,y+5,1,1,c);
+}
+
+/* ---------- Décor ---------- */
+function drawWindow(wx, wy){
+  rect(wx-3, wy+2, 3, 14, "#2b6fb5"); rect(wx+12, wy+2, 3, 14, "#2b6fb5");
+  rect(wx, wy+2, 12, 16, "#1f5fa6"); rect(wx+2, wy, 8, 2, "#1f5fa6");
+  rect(wx+2, wy+4, 8, 12, "#123a6b"); rect(wx+2, wy+2, 8, 2, "#123a6b"); rect(wx+5, wy+4, 2, 12, "#1f5fa6");
+}
+function drawDoor(dx, dy){
+  rect(dx, dy, 16, 30, "#1f5fa6"); rect(dx+2, dy-2, 12, 2, "#1f5fa6"); rect(dx+4, dy-3, 8, 1, "#1f5fa6");
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) rect(dx+3+c*4, dy+4+r*6, 2, 2, "#0e2a52");
+  rect(dx+12, dy+16, 2, 2, "#e2b93b");
+}
+function drawPalm(px, py){
+  rect(px, py-70, 3, 70, "#7a5230"); rect(px+1, py-70, 1, 70, "#94663a");
+  const dirs = [[-1,-0.3],[-1,0.1],[-0.6,-0.8],[0.6,-0.8],[1,-0.3],[1,0.1],[0,-1]];
+  for (const d of dirs) for (let t = 0; t < 16; t++) rect(px+1 + d[0]*t, py-70 + d[1]*t + 0.12*t*t, 2, 2, t % 2 ? "#2f8f4e" : "#4fb06a");
+}
+function drawBG(cam){
+  const g = ctx.createLinearGradient(0,0,0,150);
+  g.addColorStop(0,"#6fb7e6"); g.addColorStop(1,"#cfe8f7");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,150);
+  rect(0,150,W,120,"#2f86c4"); rect(0,150,W,2,"#8ac4ea");
+  for (let i = 0; i < 5; i++) rect(((i*97 + Math.floor(tick/40)) % W), 165 + i*14, 18, 1, "#5aa5dc");
+  const fc = cam*0.25;
+  for (let k = Math.floor(fc/44)-1; k <= Math.floor((fc+W)/44)+1; k++){
+    const x = Math.round(k*44 - fc), w = 30 + Math.floor(hh(k)*10), bh = 70 + Math.floor(hh(k+50)*70);
+    rect(x, STREET-bh, w, bh, "#cfe3f2"); rect(x, STREET-bh, w, 2, "#e6f1f9");
+    for (let wy = STREET-bh+8; wy < STREET-10; wy += 16){ rect(x+5, wy, 4, 6, "#7fb2dc"); rect(x+w-9, wy, 4, 6, "#7fb2dc"); }
+  }
+  const nc = cam*0.5;
+  for (let k = Math.floor(nc/96)-1; k <= Math.floor((nc+W)/96)+1; k++){
+    const x = Math.round(k*96 - nc), w = 60 + Math.floor(hh(k+7)*26), bh = 110 + Math.floor(hh(k+11)*60), top = STREET - bh;
+    rect(x, top, w, bh, "#f8f8f4"); rect(x+w-5, top, 5, bh, "#dde5ec"); rect(x, top, w, 3, "#e9eef2");
+    for (let wy = top+14; wy < 200; wy += 34){ drawWindow(x+8, wy); drawWindow(x+w-22, wy); }
+    if (hh(k+41) > 0.4) for (let i = 0; i < 16; i++)
+      rect(x+w-18+Math.floor(hh(k*13+i)*20), top-2+Math.floor(hh(k*7+i)*24), 3, 3, i%3===0 ? "#b83280" : i%2 ? "#e0559a" : "#f28bb8");
+    if (hh(k+51) > 0.55) drawPalm(x + w + 8, STREET);
+  }
+  ctx.fillStyle = "rgba(150,200,235,.45)"; ctx.fillRect(0, 60, W, STREET-60);   // brume : recule le décor
+  ctx.fillStyle = "rgba(15,42,68,.30)"; ctx.fillRect(0, 232, W, 18);              // ombre des ruelles
+}
+function drawStreet(cam){
+  rect(0, STREET, W, 20, "#5b3a29");
+  for (let i = -1; i < W/16 + 2; i++){
+    const tx = i*16 - (cam % 16);
+    rect(tx+15, STREET, 1, 20, "#3b2416");
+    for (let r = -4; r <= 4; r++){ const half = 4 - Math.abs(r); rect(tx+8-half-1, STREET+10+r, half*2+2, 1, "#c9a35a"); }
+    rect(tx+7, STREET+9, 2, 2, "#7a4a2a");
+  }
+  rect(0, STREET, W, 1, "#3b2416");
+}
+function drawHouse(h, cam){
+  const x = Math.round(h.x - cam), y = h.y, w = h.w;
+  if (x > W || x + w < 0) return;
+  const k = Math.floor(h.x);
+  rect(x, y, w, STREET-y, "#f8f8f4"); rect(x+w-5, y+8, 5, STREET-y-8, "#dde5ec");
+  // toit : bande de zellige bleu et blanc
+  rect(x, y, w, 8, "#f6f6f0"); rect(x, y+7, w, 1, "#1f5fa6");
+  for (let cx = 0; cx < w; cx += 8){
+    rect(x+cx+3, y+2, 2, 1, "#1f5fa6"); rect(x+cx+2, y+3, 4, 2, "#1f5fa6"); rect(x+cx+3, y+5, 2, 1, "#1f5fa6");
+  }
+  for (let wy = y+16; wy + 18 < STREET-36; wy += 34){
+    if (w >= 70){ drawWindow(x+8, wy); drawWindow(x+w-22, wy); } else drawWindow(x+Math.floor(w/2)-6, wy);
+  }
+  if (w >= 60) drawDoor(x + Math.floor(w/2) - 8, STREET-30);
+  if (w >= 80 && hh(k+3) > 0.5){ rect(x+10, y-5, 6, 5, "#b5533c"); rect(x+11, y-9, 4, 4, "#2f8f4e"); rect(x+13, y-11, 2, 2, "#e0559a"); }
+  if (hh(k+4) > 0.5) for (let i = 0; i < 12; i++)
+    rect(x+w-6+Math.floor(hh(k+i)*9), y+2+Math.floor(hh(k*3+i)*20), 3, 3, i%3===0 ? "#b83280" : i%2 ? "#e0559a" : "#f28bb8");
+}
+function drawCactus(c, cam){
+  const x = Math.round(c.x - cam), y = c.y - 8;
+  rect(x+1, y+2, 8, 6, "#2f8f4e"); rect(x+2, y+1, 6, 1, "#2f8f4e"); rect(x, y+3, 10, 3, "#2f8f4e");
+  rect(x+2, y+3, 1, 1, "#f4f1c9"); rect(x+6, y+4, 1, 1, "#f4f1c9"); rect(x+4, y+6, 1, 1, "#f4f1c9");
+  rect(x+4, y-2, 3, 3, "#d64580");
+}
+function drawGull(g, cam){
+  const p = gullPos(g), x = Math.round(p.x - cam), y = Math.round(p.y), up = Math.floor(tick/8) % 2;
+  ctx.save(); ctx.translate(x, 0); if (p.dir < 0) ctx.scale(-1, 1);
+  rect(-6, y+3, 7, 3, "#ffffff"); rect(3, y+2, 3, 3, "#ffffff"); rect(6, y+3, 2, 1, "#f2b632"); rect(-8, y+3, 3, 2, "#dfe6ec"); rect(4, y+3, 1, 1, "#111");
+  if (up){ rect(-3, y, 3, 3, "#dfe6ec"); rect(-4, y-1, 2, 2, "#9aa9b8"); }
+  else { rect(-3, y+6, 5, 2, "#dfe6ec"); rect(-4, y+7, 3, 2, "#9aa9b8"); }
+  ctx.restore();
+}
+function drawFlag(x, y){
+  x = Math.round(x - camera); rect(x, y-50, 2, 50, "#f6f6f0"); rect(x-1, y-52, 4, 3, "#e2b93b");
+  rect(x+2, y-48, 24, 14, "#e70013");
+  rect(x+11, y-46, 8, 10, "#f6f6f0"); rect(x+9, y-44, 12, 6, "#f6f6f0"); rect(x+10, y-45, 10, 8, "#f6f6f0");
+  rect(x+14, y-43, 4, 4, "#e70013"); rect(x+16, y-42, 2, 2, "#f6f6f0");
+}
+
+
+/* ---------- Son (synthétisé, aucun fichier audio) ---------- */
+let AC = null, master, musicG, sfxG, noiseBuf, muted = false, nextT = 0, mstep = 0;
+const SC = [293.66,311.13,369.99,392,440,466.16,523.25,587.33];   // gamme Hijaz sur ré
+const MEL = [4,null,5,4,2,null,1,2, 3,null,2,1,0,null,null,null, 4,null,6,5,4,null,2,3, 4,2,1,2,0,null,null,null];
+const BASS = [146.83,146.83,98,110];
+const DRUM = ['D',null,'T','T','D',null,'T',null];
+const STEP = 60/128/2;
+function initAudio(){
+  if (AC){ if (AC.state === 'suspended') AC.resume(); return; }
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  master = AC.createGain(); master.gain.value = muted ? 0 : 0.8; master.connect(AC.destination);
+  musicG = AC.createGain(); musicG.gain.value = 0.18; musicG.connect(master);
+  sfxG = AC.createGain(); sfxG.gain.value = 0.7; sfxG.connect(master);
+  noiseBuf = AC.createBuffer(1, Math.floor(AC.sampleRate*0.2), AC.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  nextT = AC.currentTime + 0.1; mstep = 0;
+  setInterval(scheduler, 50);
+}
+function tone(f, dur, type, vol, slide, when, dest){
+  if (!AC) return;
+  const t = when || AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'square'; o.frequency.setValueAtTime(f, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(dest || sfxG); o.start(t); o.stop(t + dur + 0.05);
+}
+function tek(when, v){
+  const src = AC.createBufferSource(); src.buffer = noiseBuf;
+  const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+  const g = AC.createGain(); g.gain.setValueAtTime(v, when); g.gain.exponentialRampToValueAtTime(0.001, when + 0.06);
+  src.connect(hp); hp.connect(g); g.connect(musicG); src.start(when); src.stop(when + 0.08);
+}
+function playStep(st, t){
+  const m = MEL[st]; if (m !== null) tone(SC[m], 0.3, 'triangle', 0.45, null, t, musicG);
+  if (st % 8 === 0) tone(BASS[(st >> 3) % 4], STEP*7, 'triangle', 0.5, null, t, musicG);
+  const d = DRUM[st % 8];
+  if (d === 'D') tone(120, 0.16, 'sine', 0.8, 45, t, musicG);
+  if (d === 'T') tek(t, 0.5);
+}
+function scheduler(){
+  if (!AC || AC.state !== 'running') return;
+  if (nextT < AC.currentTime) nextT = AC.currentTime + 0.05;
+  while (nextT < AC.currentTime + 0.25){ playStep(mstep, nextT); nextT += STEP; mstep = (mstep + 1) % 32; }
+}
+const sfx = {
+  jump(){ tone(280, 0.13, 'square', 0.25, 620); },
+  coin(){ tone(988, 0.07, 'square', 0.2); tone(1319, 0.14, 'square', 0.2, null, AC.currentTime + 0.07); },
+  hurt(){ tone(220, 0.3, 'sawtooth', 0.3, 70); },
+  fall(){ tone(500, 0.5, 'triangle', 0.4, 80); },
+  lost(){ [392,349,311,262].forEach((f,i) => tone(f, 0.28, 'square', 0.22, null, AC.currentTime + i*0.22)); },
+  stage(){ [523,659,784,1047].forEach((f,i) => tone(f, 0.16, 'square', 0.22, null, AC.currentTime + i*0.11)); },
+  deliver(){ [523,659,784,659,784,1047,1319].forEach((f,i) => tone(f, 0.2, 'square', 0.24, null, AC.currentTime + i*0.13)); },
+  select(){ tone(660, 0.08, 'square', 0.2); },
+  whoosh(){ tone(200, 0.45, 'sine', 0.3, 900); },
+  slap(){ tone(160, 0.1, 'square', 0.6, 50); tone(90, 0.16, 'sawtooth', 0.4, 40); nz(0.12, 0.8); },
+  growl(){ tone(110, 0.55, 'sawtooth', 0.3, 65); tone(112, 0.55, 'square', 0.15, 66); },
+  whistle(){ for (let i = 0; i < 3; i++) tone(2000, 0.08, 'square', 0.12, 2500, AC.currentTime + i*0.11); }
+};
+function nz(dur, vol){
+  const src = AC.createBufferSource(); src.buffer = noiseBuf;
+  const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800;
+  const g = AC.createGain(); g.gain.setValueAtTime(vol, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  src.connect(bp); bp.connect(g); g.connect(sfxG); src.start(); src.stop(AC.currentTime + dur + 0.02);
+}
+function S(n){ if (AC && sfx[n]) sfx[n](); }
+const VOICE = { Tata:330, Maman:250, Ahmed:210, Nour:280, Yassine:170, Papa:140, Facteur:230, Police:190 };
+function blip(who){ tone((VOICE[who] || 220) * (0.92 + Math.random()*0.2), 0.05, 'square', 0.14); }
+function toggleMute(){ muted = !muted; if (master) master.gain.value = muted ? 0 : 0.8; }
+document.addEventListener('visibilitychange', () => {
+  if (!AC) return; if (document.hidden) AC.suspend(); else AC.resume();
+});
+
+/* ---------- Cinématique d'introduction ---------- */
+let SCRIPT = [];
+function buildScript(){
+  const [c1, c2] = comps();
+  return [
+    { who:"Tata", t:"Ahmed ! Nour ! Yassine ! Venez vite !" },
+    { who:"Tata", t:"J'ai préparé le meilleur couscous du quartier." },
+    { who:"Tata", t:"Portez-le à votre mère avant qu'il refroidisse !" },
+    { who:"Tata", t:"Et si vous ne réussissez pas, les claquettes arrivent !" },
+    { who:c1,     t:"Pas les claquettes... Tout mais pas les claquettes !" },
+    { who:c2,     t:"Mais les ruelles sont pleines de monde, Tata..." },
+    { who:"Tata", t:"Alors passez par les toits ! Et ne renversez rien !" },
+    { who:HERO,   t:"Compte sur moi, Tata. Suivez-moi, vous deux !" },
+    { who:c1,     t:"On te suit ! Attention aux mouettes !" }
+  ];
+}
+const WHO_COL = { Tata:"#c084fc", Maman:"#ff8a7a", Ahmed:"#ffd166", Nour:"#f5a6c6", Yassine:"#7cc7f2", Papa:"#d6a86b", Facteur:"#f2d04a", Police:"#7fa1f5" };
+function cutAdvance(){
+  if (!CS || CS.phase !== 'talk') return;
+  const line = SCRIPT[CS.i];
+  if (CS.typed < line.t.length){ CS.typed = line.t.length; return; }
+  S('select');
+  if (CS.i < SCRIPT.length - 1){ CS.i++; CS.typed = 0; CS.acc = 0; }
+  else { CS.phase = 'give'; CS.t = 0; }
+}
+function cutSkip(){ if (CS && CS.phase === 'talk'){ CS.phase = 'fade'; CS.t = 0; } }
+function cutUpdate(){
+  if (CS.bar < 1) CS.bar = Math.min(1, CS.bar + 0.05);
+  if (CS.phase === 'talk'){
+    const line = SCRIPT[CS.i];
+    if (CS.typed < line.t.length){
+      CS.acc += 0.7;
+      while (CS.acc >= 1 && CS.typed < line.t.length){
+        CS.acc -= 1; CS.typed++;
+        if (CS.typed % 2 === 0 && line.t[CS.typed-1] !== ' ') blip(line.who);
+      }
+    }
+  } else if (CS.phase === 'give'){
+    if (++CS.t === 1) S('whoosh');
+    if (CS.t >= 60){ CS.phase = 'fade'; CS.t = 0; }
+  } else if (CS.phase === 'fade'){
+    if (++CS.t >= 25){ loadLevel(0); state = 'play'; fadeIn = 25; }
+  }
+}
+function drawCutscene(){
+  drawBG(0); drawStreet(0);
+  for (const h of level.houses) drawHouse(h, 0);
+  const line = SCRIPT[CS.i], ay = level.houses[0].y - 24;
+  const speaking = CS.phase === 'talk' && CS.typed < line.t.length ? line.who : null;
+  const bob = n => speaking === n ? -(Math.floor(tick/5) % 2) : 0;
+  const cs = comps();
+  [[cs[0], 10], [cs[1], 42], [HERO, 74]].forEach(([n, x], i) => {
+    sprite(x, ay + bob(n), PALS[n], 1, FR(n, 0));
+    txt(n, x + 6, ay + bob(n) - (i === 1 ? 13 : 4), 8, n === HERO ? heroCol(n) : "#fff", "center");
+  });
+  const threat = CS.phase === 'talk' && (CS.i === 3 || CS.i === 4);
+  sprite(110, ay + bob("Tata"), PALS.Tata, -1, MOMF[threat ? 1 : (speaking === "Tata" ? Math.floor(tick/8) % 2 : 0)]);
+  if (threat) slipper(108 - 2 + Math.round(Math.sin(tick/3)*2), ay - 2);
+  txt("Tata", 116, ay - 24, 8, "#e9c9ff", "center");
+  // le plat passe des mains de Tata à la tête d'Ahmed
+  if (CS.phase === 'talk') bowl(116, ay - 3 + bob("Tata"), MAXP);
+  else if (CS.phase === 'give'){ const p = CS.t / 60; bowl(116 + (80 - 116)*p, ay - 3 - Math.sin(p*Math.PI)*16, MAXP); }
+  else bowl(80, ay - 3, MAXP);
+
+  const bar = Math.round(24 * CS.bar);
+  rect(0, 0, W, bar, "#000"); rect(0, H - bar, W, bar, "#000");
+  if (CS.phase === 'talk'){
+    txt("Échap : passer", 8, 15, 8, "#8ec5e8");
+    ctx.fillStyle = "rgba(10,25,45,.93)"; ctx.fillRect(14, 196, 452, 50);
+    ctx.strokeStyle = "#f6f6f0"; ctx.lineWidth = 1; ctx.strokeRect(14.5, 196.5, 451, 49);
+    rect(22, 188, line.who.length*7 + 14, 14, WHO_COL[line.who]);
+    ctx.fillStyle = "#0f2a44"; ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign = "left"; ctx.fillText(line.who, 29, 199);
+    txt(line.t.slice(0, CS.typed), 26, 226, 11, "#fff");
+    if (CS.typed >= line.t.length && Math.floor(tick/20) % 2) txt("▼", 456, 240, 9, "#f2b632", "right");
+  } else if (CS.phase === 'give'){
+    txt("Direction chez Maman !", W/2, 110, 14, "#f2b632", "center");
+  }
+}
+function drawFadeAndMute(){
+  let a = 0;
+  if (state === 'cutscene' && CS && CS.phase === 'fade') a = CS.t / 25; else if (fadeIn > 0) a = fadeIn / 25;
+  if (a > 0){ ctx.globalAlpha = Math.min(1, a); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(W-62, 4, 58, 14);
+  txt(muted ? "Son OFF" : "Son ON", W-8, 15, 8, muted ? "#ff8fa3" : "#8ec5e8", "right");
+}
+
+
+/* ---------- Scène de défaite : Maman et Tata sont furieuses ---------- */
+let lostT = 0;
+let LOST_LINES = [], LOSTCFG = { victims:[], angry:[], lines:[] };
+function buildLostCfg(){
+  const [c1] = comps();
+  if (MODE === 'roof') return { victims:[...comps(), HERO], angry:["Maman","Tata"], lines:[
+    { who:"Maman", t:"Mon couscous ?! Il est où, mon couscous ?!" },
+    { who:"Tata",  t:"Je vous avais prévenus... Les claquettes !" },
+    { who:HERO,    t:"Aïe aïe aïe... Pardon Maman !" },
+    { who:c1,      t:"J'ai une bosse grosse comme un couscoussier !" } ] };
+  if (MODE === 'mail') return { victims:[...comps(), HERO], angry:["Papa","Maman"], lines:[
+    { who:"Papa",  t:"Mon courrier ?! Où est mon courrier ?!" },
+    { who:"Maman", t:"Je vous avais prévenus... Les claquettes !" },
+    { who:HERO,    t:"Aïe aïe aïe... Pardon Papa !" },
+    { who:c1,      t:"Les policiers m'ont couru après !" } ] };
+  return { victims:["Tata"], angry:["Maman","Papa"], lines:[
+    { who:"Maman", t:"Et le couscous ?! Toute la famille a faim !" },
+    { who:"Papa",  t:"Tata, on n'a même pas un peu de semoule ?!" },
+    { who:"Tata",  t:"Aïe... Pardon, le marché était bondé !" } ] };
+}
+function setLost(){ state = 'lost'; lostT = 0; LOSTCFG = buildLostCfg(); LOST_LINES = LOSTCFG.lines; S('lost'); }
+function lostUpdate(){
+  lostT++;
+  const idx = Math.floor(lostT/170) % LOST_LINES.length, lt = lostT % 170, line = LOST_LINES[idx];
+  const typed = Math.floor(lt*0.7);
+  if (lt > 0 && typed !== Math.floor((lt-1)*0.7) && typed <= line.t.length && typed % 2 === 0) blip(line.who);
+  if (lostT === 25) S('growl');
+  if (lt === 60 && idx === 1) S('slap');
+  if (lt === 95 && idx === 1) S('slap');
+}
+function slipper(x, y){
+  rect(x+1, y, 3, 9, "#e6b17e"); rect(x, y+2, 5, 6, "#e6b17e"); rect(x, y+4, 5, 1, "#d64580"); rect(x+1, y+8, 3, 1, "#b5835a");
+}
+function angryFace(x, y, dir, male){
+  const ox = Math.round(x) - 2, oy = Math.round(y);
+  const by = male ? 5 : 4, my = male ? 9 : 7;
+  rect(ox+5, oy+by, 3, 1, "#2b1a12"); rect(ox+8, oy+by, 3, 1, "#2b1a12");     // sourcils
+  rect(ox+7, oy+my, 3, male ? 1 : 2, "#5a1a1a"); if (!male) rect(ox+8, oy+my, 1, 1, "#ffffff");   // bouche ouverte
+  const big = Math.floor(tick/8) % 2, vx = ox + (dir < 0 ? 12 : 2), vy = oy - 1;   // veine de colère
+  rect(vx, vy - big, 1, 3 + big*2, "#e11d48"); rect(vx - 1 - big, vy + 1, 3 + big*2, 1, "#e11d48");
+  for (let k = 0; k < 2; k++)                                                // fumée
+    rect(ox + 5 + k*5 + Math.round(Math.sin(tick/7 + k)), oy - 4 - Math.floor((tick/4 + k*5) % 10), 2, 2, "rgba(255,255,255,.75)");
+}
+function bobo(x, y, i){
+  const ox = Math.round(x) - 2, oy = Math.round(y), bx = ox + 5 + (i % 2)*3;
+  rect(bx, oy-2, 4, 3, "#f4a58c"); rect(bx+1, oy-3, 2, 1, "#f4a58c"); rect(bx+1, oy-2, 1, 1, "#ffd9cc");   // bosse
+  rect(ox+4, oy+5, 8, 1, "#f6f6f0"); rect(ox+7, oy+4, 2, 1, "#f6f6f0"); rect(ox+8, oy+5, 1, 1, "#e11d48"); // pansement
+  rect(ox+4, oy+7, 1, 2, "#7cc7f2"); rect(ox+11, oy+7, 1, 2, "#7cc7f2");                                    // larmes
+  for (let k = 0; k < 3; k++){                                                                              // étoiles
+    const a = tick/10 + k*2.1, sx = Math.round(ox + 8 + Math.cos(a)*9), sy = Math.round(oy - 7 + Math.sin(a)*3);
+    rect(sx, sy, 1, 1, "#ffe066"); rect(sx-1, sy, 1, 1, "#ffe066"); rect(sx+1, sy, 1, 1, "#ffe066"); rect(sx, sy-1, 1, 1, "#ffe066"); rect(sx, sy+1, 1, 1, "#ffe066");
+  }
+}
+function drawLost(){
+  drawBG(0); drawStreet(0);
+  const roof = 170, ay = roof - 24;
+  drawHouse({ x:40, y:roof, w:400, gap:0 }, 0);
+  const V = LOSTCFG.victims;
+  V.forEach((n, i) => {
+    const x = 154 - (V.length - 1 - i)*32, yy = ay + (Math.floor(tick/12 + i) % 2);
+    sprite(x, yy, PALS[n], 1, FR(n, 0)); bobo(x, yy, i);
+    txt(n, x + 6, yy - (V.length === 3 && i === 1 ? 24 : 14), 8, heroCol(n), "center");
+  });
+  LOSTCFG.angry.forEach((n, k) => {
+    const jx = 250 + k*42 + (tick % 4 < 2 ? -1 : 1), female = n !== "Papa";
+    sprite(jx, ay, PALS[n + "Angry"], -1, female ? MOMF[1] : FRAMES[0]); angryFace(jx, ay, -1, !female);
+    slipper(jx - 4 + Math.round(Math.sin(tick/3)*2), ay - 2);
+    txt(n, jx + 6, ay - 16, 8, "#ffb3a7", "center");
+  });
+  const bar = Math.round(24 * Math.min(1, lostT/20));
+  rect(0, 0, W, bar, "#000"); rect(0, H - bar, W, bar, "#000");
+  const idx = Math.floor(lostT/170) % LOST_LINES.length, lt = lostT % 170, line = LOST_LINES[idx];
+  ctx.fillStyle = "rgba(10,25,45,.93)"; ctx.fillRect(14, 196, 452, 50);
+  ctx.strokeStyle = "#f6f6f0"; ctx.lineWidth = 1; ctx.strokeRect(14.5, 196.5, 451, 49);
+  rect(22, 188, line.who.length*7 + 14, 14, WHO_COL[line.who]);
+  ctx.fillStyle = "#0f2a44"; ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign = "left"; ctx.fillText(line.who, 29, 199);
+  txt(line.t.slice(0, Math.floor(lt*0.7)), 26, 226, 11, "#fff");
+  txt("Le couscous est renversé !", W/2, 16, 10, "#f2b632", "center");
+  if (lostT > 40 && Math.floor(tick/25) % 2) txt("Entrée ou toucher l'écran : réessayer", W/2, 262, 9, "#8ec5e8", "center");
+}
+
+
+/* ---------- Menu, choix du joueur, crédits ---------- */
+const CHARS = ['Ahmed','Nour','Yassine'];
+let HERO = 'Ahmed';
+try { const h = localStorage.getItem('sidiHero'); if (CHARS.includes(h)) HERO = h; } catch(e){}
+function comps(){ return CHARS.filter(n => n !== HERO); }
+function saveHero(){ try { localStorage.setItem('sidiHero', HERO); } catch(e){} }
+const heroCol = n => n === "Nour" ? "#ffb3d1" : n === "Yassine" ? "#9fd6f7" : n === "Tata" ? "#e9c9ff" : "#ffd166";
+const MENU = ["Jouer", "Niveaux", "Changer de joueur", "Crédits"], MENU_Y = [104, 126, 148, 170];
+const CX = [40, 180, 320];
+const TAGS = { Ahmed:"Le chef de la bande", Nour:"La reine du couscous", Yassine:"Le costaud du quartier" };
+let menuSel = 0, selIdx = 0, selLvl = 0, creditsT = 0;
+const CREDITS = [
+  ["SIDI RUNNER",22,"#f6f6f0"],["Le couscous de Maman",11,"#f2b632"],["",8],
+  ["UN JEU DE",9,"#8ec5e8"],["Youssef Kalai",22,"#ffd166"],["",8],
+  ["IDÉE, HISTOIRE ET PERSONNAGES",9,"#8ec5e8"],["Youssef Kalai",12,"#fff"],["",8],
+  ["LA BANDE",9,"#8ec5e8"],["Ahmed",11,"#fff"],["Nour",11,"#fff"],["Yassine",11,"#fff"],["",8],
+  ["LES MÈRES EN COLÈRE",9,"#8ec5e8"],["Tata et Maman",11,"#fff"],["(et leurs claquettes)",9,"#ffb3a7"],["",8],
+  ["LE VILLAGE",9,"#8ec5e8"],["Papa, le facteur et les policiers",10,"#fff"],["",8],
+  ["INSPIRATION",9,"#8ec5e8"],["Sidi Bou Saïd, Tunisie",11,"#fff"],["100% Mloukhiya",11,"#fff"],["",8],
+  ["MERCI POUR LE COUSCOUS",9,"#8ec5e8"],["",8],["Un jeu de Youssef Kalai",10,"#ffd166"]
+];
+function menuActivate(){
+  S('select');
+  if (menuSel === 0) startGame();
+  else if (menuSel === 1){ state = 'levels'; selLvl = 0; }
+  else if (menuSel === 2){ state = 'select'; selIdx = CHARS.indexOf(HERO); }
+  else { state = 'credits'; creditsT = 0; }
+}
+function bigSprite(x, y, name, scale, frame, dir){
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(scale, scale);
+  sprite(2, 0, PALS[name], dir || 1, FR(name, frame)); ctx.restore();
+}
+function drawRoofStrip(y){
+  rect(0, y, W, STREET - y, "#f8f8f4"); rect(0, y, W, 8, "#f6f6f0"); rect(0, y+7, W, 1, "#1f5fa6");
+  for (let cx = 0; cx < W; cx += 8){ rect(cx+3, y+2, 2, 1, "#1f5fa6"); rect(cx+2, y+3, 4, 2, "#1f5fa6"); rect(cx+3, y+5, 2, 1, "#1f5fa6"); }
+  for (let cx = 30; cx < W; cx += 90) drawWindow(cx, y + 14);
+}
+function menuBackdrop(){
+  const cam = Math.round(tick * 0.3);
+  drawBG(cam); drawStreet(cam); drawRoofStrip(214);
+}
+function drawBack(){
+  ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.fillRect(8, 240, 64, 18);
+  txt("< Retour", 40, 253, 9, "#fff", "center");
+}
+function drawMenu(){
+  menuBackdrop();
+  const ay = 214 - 24, cs = comps();
+  [[cs[1], 336], [cs[0], 366], [HERO, 398]].forEach(([n, x], i) => {
+    sprite(x, ay, PALS[n], -1, FR(n, 0));
+    txt(n, x + 6, ay - (n === HERO ? 24 : (i === 1 ? 13 : 4)), 8, n === HERO ? heroCol(n) : "#fff", "center");
+  });
+  bowl(404, ay - 3, MAXP);
+  sprite(60, ay, PALS.Tata, 1, MOMF[Math.floor(tick/14) % 2]); txt("Tata", 66, ay - 4, 8, "#e9c9ff", "center");
+  ctx.fillStyle = "rgba(15,42,68,.78)"; ctx.fillRect(110, 26, 260, 176);
+  txt("SIDI RUNNER", W/2, 60, 28, "#f6f6f0", "center");
+  txt("Le couscous de Maman", W/2, 77, 11, "#f2b632", "center");
+  MENU.forEach((label, i) => {
+    const sel = i === menuSel, cy = MENU_Y[i];
+    rect(W/2 - 100, cy - 13, 200, 20, sel ? "#f2b632" : "rgba(255,255,255,.14)");
+    ctx.font = 'bold 12px "Courier New",monospace'; ctx.textAlign = "center";
+    ctx.fillStyle = sel ? "#0f2a44" : "#ffffff"; ctx.fillText((sel ? "> " : "") + label + (sel ? " <" : ""), W/2, cy + 2);
+  });
+  txt("Joueur : " + HERO, W/2, 192, 8, heroCol(HERO), "center");
+  txt("Un jeu de Youssef Kalai", W/2, 262, 8, "#fff", "center");
+}
+function drawSelect(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.62)"; ctx.fillRect(0, 0, W, H);
+  txt("Choisis ton joueur", W/2, 34, 18, "#f2b632", "center");
+  CHARS.forEach((n, i) => {
+    const x = CX[i], sel = i === selIdx, y = 48;
+    ctx.fillStyle = sel ? "rgba(30,70,110,.95)" : "rgba(15,42,68,.85)"; ctx.fillRect(x, y, 120, 164);
+    ctx.strokeStyle = sel ? "#f2b632" : "#f6f6f0"; ctx.lineWidth = sel ? 2 : 1; ctx.strokeRect(x + .5, y + .5, 119, 163);
+    bigSprite(x + 34, y + 20 + (sel ? -Math.abs(Math.round(Math.sin(tick/8)*3)) : 0), n, 3, sel ? Math.floor(tick/8) % 2 : 0);
+    txt(n, x + 60, y + 118, 13, sel ? heroCol(n) : "#fff", "center");
+    txt(TAGS[n], x + 60, y + 134, 8, "#c9dcec", "center");
+    if (n === HERO) txt("JOUEUR ACTUEL", x + 60, y + 152, 7, "#8ec5e8", "center");
+  });
+  txt("Touche un personnage pour le choisir", W/2, 228, 9, "#fff", "center");
+  txt("< > : choisir   Entrée : valider   Échap : retour", W/2, 244, 8, "#8ec5e8", "center");
+  drawBack();
+}
+const LVL_INFO = [
+  { title:"NIVEAU 1", name:"Les toits",  tag:"Le couscous de Maman" },
+  { title:"NIVEAU 2", name:"Le courrier", tag:"Traverse le marché" },
+  { title:"BONUS",    name:"Chez Tata",  tag:"Fais le couscous" }
+];
+function levelDone(i){ return i === 0 ? PROG.done1 : i === 1 ? PROG.done2 : false; }
+function levelStart(i){
+  if (i === 2 && !bonusUnlocked()){ S('hurt'); return; }
+  S('select');
+  if (i === 0) startGame(); else if (i === 1) startStreet('mail', true, true); else startStreet('market', true, true);
+}
+function drawLevels(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.62)"; ctx.fillRect(0, 0, W, H);
+  txt("Choisis un niveau", W/2, 34, 18, "#f2b632", "center");
+  LVL_INFO.forEach((L, i) => {
+    const x = CX[i], sel = i === selLvl, y = 48, locked = i === 2 && !bonusUnlocked();
+    ctx.fillStyle = sel ? "rgba(30,70,110,.95)" : "rgba(15,42,68,.85)"; ctx.fillRect(x, y, 120, 164);
+    ctx.strokeStyle = sel ? "#f2b632" : "#f6f6f0"; ctx.lineWidth = sel ? 2 : 1; ctx.strokeRect(x + .5, y + .5, 119, 163);
+    const who = i === 0 ? HERO : i === 1 ? "Papa" : "Tata";
+    bigSprite(x + 34, y + 14 + (sel && !locked ? -Math.abs(Math.round(Math.sin(tick/8)*3)) : 0), who, 3, sel && !locked ? Math.floor(tick/8) % 2 : 0);
+    txt(L.title, x + 60, y + 104, 8, "#8ec5e8", "center");
+    txt(L.name, x + 60, y + 120, 13, sel ? "#f2b632" : "#fff", "center");
+    txt(L.tag, x + 60, y + 136, 8, "#c9dcec", "center");
+    if (levelDone(i)) txt("TERMINÉ", x + 60, y + 154, 8, "#7ee08a", "center");
+    if (locked){
+      ctx.fillStyle = "rgba(8,18,32,.78)"; ctx.fillRect(x + 1, y + 1, 118, 162);
+      rect(x + 52, y + 56, 16, 12, "#f2b632"); rect(x + 55, y + 46, 2, 10, "#c9d4de"); rect(x + 63, y + 46, 2, 10, "#c9d4de"); rect(x + 55, y + 44, 10, 3, "#c9d4de");
+      txt("VERROUILLÉ", x + 60, y + 112, 9, "#f2b632", "center");
+      txt("Finis les niveaux 1 et 2", x + 60, y + 128, 7, "#fff", "center");
+    }
+  });
+  txt("Touche un niveau pour jouer", W/2, 228, 9, "#fff", "center");
+  txt("< > : choisir   Entrée : jouer   Échap : retour", W/2, 244, 8, "#8ec5e8", "center");
+  drawBack();
+}
+function drawCredits(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.82)"; ctx.fillRect(0, 0, W, H);
+  const off = (creditsT * 0.5) % 640;
+  CREDITS.forEach(([t, size, col], i) => {
+    const y = 240 + i*20 - off;
+    if (t && y > 22 && y < H - 16) txt(t, W/2, y, size, col, "center");
+  });
+  rect(0, 0, W, 20, "#000"); rect(0, H - 16, W, 16, "#000");
+  txt("Un jeu de Youssef Kalai", W/2, 14, 9, "#ffd166", "center");
+  txt("Entrée ou toucher : retour", W/2, H - 4, 8, "#8ec5e8", "center");
+}
+
+
+/* ---------- Niveau 2 et bonus : traverser Sidi Bou Saïd (la rue, le marché) ---------- */
+const FLOOR = 226, SW = 2900, PAPA_X = 44, POST_X = 2590;
+let MODE = 'roof', SL = null, DLG = null, COOK = null, hasMail = false, alertOn = false, banner = null;
+let winKind = 'roof', PROG = { done1:false, done2:false };
+try { const pr = JSON.parse(localStorage.getItem('sidiProg') || '{}'); PROG.done1 = !!pr.done1; PROG.done2 = !!pr.done2; } catch(e){}
+function saveProg(){ try { localStorage.setItem('sidiProg', JSON.stringify(PROG)); } catch(e){} }
+const bonusUnlocked = () => PROG.done1 && PROG.done2;
+const me = () => MODE === 'market' ? 'Tata' : HERO;
+const child = n => n === 'Nour' ? 'ma fille' : 'mon fils';
+const STALLS = [
+  { x:700,  w:80, awn:true,  col:"#c0392b" }, { x:960,  w:80, awn:false, col:"#f2b632" },
+  { x:1220, w:80, awn:true,  col:"#1f5fa6" }, { x:1520, w:80, awn:false, col:"#2f855a" },
+  { x:1800, w:80, awn:true,  col:"#c0392b" }, { x:2120, w:80, awn:false, col:"#f2b632" },
+  { x:2400, w:80, awn:true,  col:"#1f5fa6" } ];
+const CRATES = [420, 830, 1120, 1370, 1660, 1960, 2290, 2520];
+const ING = [
+  { k:"Semoule", stall:0, up:true }, { k:"Viande", stall:1, up:false }, { k:"Carottes", stall:2, up:true },
+  { k:"Pois chiches", stall:3, up:false }, { k:"Courgettes", stall:4, up:true }, { k:"Harissa", stall:5, up:false } ];
+const PICK = (i, arr) => arr[Math.floor(hh(i*31 + arr.length) * arr.length)];
+function buildStreet(kind){
+  const rects = [{ x:0, y:FLOOR, w:SW, h:H - FLOOR }];
+  CRATES.forEach(x => rects.push({ x, y:FLOOR - 18, w:26, h:18 }));
+  STALLS.forEach(st => { if (st.awn) rects.push({ x:st.x - 8, y:170, w:st.w + 16, h:6 }); });
+  const crowd = [];
+  for (let i = 0; i < 22; i++){
+    const female = hh(i + 7) > 0.5, range = 20 + Math.floor(hh(i + 40)*40);
+    const fez = PICK(i, ["#c8102e","#1f5fa6","#2f855a","#f59e0b","#6d28d9"]);
+    crowd.push({ cx:600 + i*86 + Math.floor(hh(i)*30), range, w:(0.35 + hh(i + 80)*0.4) / range, ph:hh(i + 120)*6.28, female,
+      pal: female
+        ? { S:"#e0a878", M:"#2b1a12", H:PICK(i+3, ["#f6f6f0","#e0559a","#f2b632","#2f855a"]), D:PICK(i+9, ["#1f5fa6","#7c3aed","#c0392b","#0f766e","#b45309"]), G:"#f2b632", B:"#1a202c" }
+        : { ...BASE_PAL, T:null, F:fez, f:fez, W:PICK(i+5, ["#f3ead2","#e9d5ff","#bbf7d0","#fde68a","#fecaca","#bfdbfe"]), w:"#d8ccae" } });
+  }
+  const police = [[520,140,false],[1100,130,false],[1900,140,false],[2280,100,false],[800,120,true],[1500,140,true],[2150,120,true]]
+    .map(([home, range, extra]) => ({ home, range, extra, x:home, dir:1, mode:'patrol', t:0, cool:0 }));
+  const items = kind === 'market' ? ING.map(g => { const st = STALLS[g.stall];
+    return { k:g.k, x:st.x + st.w/2 - 4, y:g.up ? 170 - 14 : FLOOR - 16, got:false }; }) : [];
+  return { kind, rects, crowd, police, items };
+}
+function personPos(c){ const a = tick*c.w + c.ph; return { x:c.cx + Math.sin(a)*c.range, dir:Math.cos(a) >= 0 ? 1 : -1 }; }
+const gotCount = () => SL.items.filter(i => i.got).length;
+
+function startStreet(kind, intro, resetScore){
+  MODE = kind; if (resetScore){ score = 0; collected = 0; }
+  SL = buildStreet(kind); portions = MAXP; hasMail = false; alertOn = false; banner = null; COOK = null; friends = [];
+  player = { x:110, y:FLOOR - 25, w:12, h:24, vx:0, vy:0, onGround:false, dir:1, moving:false, inv:60, kb:0, kdir:1, house:null };
+  camera = 0; fadeIn = 20; state = 'play';
+  if (intro) openDialog(introLines(kind), () => {
+    banner = { t:170, text: kind === 'mail' ? "Va chercher le courrier à la poste !" : "Trouve tous les ingrédients au marché !" };
+  });
+}
+function introLines(kind){
+  if (kind === 'mail') return [
+    { who:"Papa", t:HERO + " ! Viens ici, j'ai une mission pour toi." },
+    { who:"Papa", t:"Le facteur garde mon courrier à la poste, au bout du village." },
+    { who:"Papa", t:"Traverse le marché, évite la foule et surtout les policiers !" },
+    { who:"Papa", t:"Ils n'aiment pas qu'on court dans les ruelles. Sois malin !" },
+    { who:HERO,   t:"Compte sur moi, Papa !" } ];
+  return [
+    { who:"Tata", t:"Oh là là ! Toute la famille arrive et je n'ai rien préparé !" },
+    { who:"Tata", t:"Semoule, viande, carottes, pois chiches, courgettes, harissa" },
+    { who:"Tata", t:"Vite au marché ! Attention à la foule et aux policiers !" } ];
+}
+const POST_LINES = () => [
+  { who:"Facteur", t:"Ah ! Tu viens chercher le courrier de ton père ?" },
+  { who:"Facteur", t:"Tiens, une grosse enveloppe ! Fais attention en chemin." },
+  { who:HERO,      t:"Merci ! Je le rapporte à Papa tout de suite !" },
+  { who:"Facteur", t:"Attention : il y a plus de policiers au retour !" } ];
+const PAPA_END = () => [
+  { who:"Papa", t:"Merci " + child(HERO) + " ! Voyons ce courrier..." },
+  { who:"Papa", t:"Encore une facture d'électricité... Je la paierai demain !" },
+  { who:"Papa", t:"Tu es un vrai champion, " + HERO + " !" } ];
+
+/* dialogues */
+function openDialog(lines, done){ DLG = { lines, i:0, typed:0, acc:0, done }; state = 'dialog'; }
+function dlgUpdate(){
+  const line = DLG.lines[DLG.i];
+  if (DLG.typed < line.t.length){
+    DLG.acc += 0.7;
+    while (DLG.acc >= 1 && DLG.typed < line.t.length){
+      DLG.acc -= 1; DLG.typed++;
+      if (DLG.typed % 2 === 0 && line.t[DLG.typed - 1] !== ' ') blip(line.who);
+    }
+  }
+}
+function dlgAdvance(){
+  const line = DLG.lines[DLG.i];
+  if (DLG.typed < line.t.length){ DLG.typed = line.t.length; return; }
+  S('select');
+  if (DLG.i < DLG.lines.length - 1){ DLG.i++; DLG.typed = 0; DLG.acc = 0; }
+  else { const cb = DLG.done; DLG = null; state = 'play'; if (cb) cb(); }
+}
+function drawDlgBox(){
+  const line = DLG.lines[DLG.i], y0 = 70;      // en haut de l'écran : on garde la scène visible en dessous
+  ctx.fillStyle = "rgba(10,25,45,.93)"; ctx.fillRect(14, y0, 452, 50);
+  ctx.strokeStyle = "#f6f6f0"; ctx.lineWidth = 1; ctx.strokeRect(14.5, y0 + .5, 451, 49);
+  rect(22, y0 - 8, line.who.length*7 + 14, 14, WHO_COL[line.who] || "#fff");
+  ctx.fillStyle = "#0f2a44"; ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign = "left"; ctx.fillText(line.who, 29, y0 + 3);
+  txt(line.t.slice(0, DLG.typed), 26, y0 + 30, 11, "#fff");
+  if (DLG.typed >= line.t.length && Math.floor(tick/20) % 2) txt("▼", 456, y0 + 44, 9, "#f2b632", "right");
+}
+
+/* police, foule, objectifs */
+function updatePolice(){
+  for (const c of SL.police){
+    if (c.extra && !alertOn) continue;
+    if (c.cool > 0) c.cool--;
+    const dx = player.x - c.x, low = player.y + player.h > FLOOR - 30;
+    if (c.mode === 'patrol'){
+      c.x += c.dir * 0.7;
+      if (c.x > c.home + c.range) c.dir = -1; if (c.x < c.home - c.range) c.dir = 1;
+      if (Math.abs(dx) < 90 && dx * c.dir > 0 && low && c.cool <= 0){ c.mode = 'chase'; c.t = 0; S('whistle'); }
+    } else {
+      c.t++; c.dir = dx >= 0 ? 1 : -1;
+      if (low) c.x += c.dir * 1.7;
+      if (c.t > 220 || Math.abs(dx) > 240){ c.mode = 'patrol'; c.dir = c.x > c.home ? -1 : 1; c.cool = 120; }
+    }
+    if (overlap(player, { x:c.x + 2, y:FLOOR - 24, w:10, h:24 })){
+      hurt(c.x + 6); c.mode = 'patrol'; c.dir = dx >= 0 ? -1 : 1; c.cool = 120;
+    }
+  }
+}
+function updateStreet(){
+  const P = player;
+  if (P.inv > 0) P.inv--;
+  if (banner && banner.t > 0) banner.t--;
+  P.vx = ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)) * SPEED;
+  if (P.kb > 0){ P.vx = P.kdir * 2; P.kb--; }
+  if (P.vx && !P.kb) P.dir = Math.sign(P.vx);
+  if (keys.jump && P.onGround){ P.vy = -JUMP; P.onGround = false; S('jump'); }
+  P.vy = Math.min(P.vy + G, 9);
+  P.x += P.vx; P.x = Math.max(0, Math.min(SW - P.w, P.x));
+  for (const r of SL.rects) if (overlap(P, r)){ if (P.vx > 0) P.x = r.x - P.w; else if (P.vx < 0) P.x = r.x + r.w; }
+  P.y += P.vy; P.onGround = false;
+  for (const r of SL.rects) if (overlap(P, r)){
+    if (P.vy > 0){ P.y = r.y - P.h; P.onGround = true; } else if (P.vy < 0) P.y = r.y + r.h;
+    P.vy = 0;
+  }
+  P.moving = P.onGround && P.vx !== 0;
+
+  for (const c of SL.crowd){
+    const pp = personPos(c);
+    if (Math.abs(pp.x - P.x) < 50 && overlap(P, { x:pp.x + 2, y:FLOOR - 22, w:10, h:22 })) hurt(pp.x + 6);
+  }
+  if (state !== 'play') return;
+  updatePolice();
+  if (state !== 'play') return;
+
+  if (SL.kind === 'mail'){
+    if (!hasMail && Math.abs(P.x - POST_X) < 30){
+      openDialog(POST_LINES(), () => { hasMail = true; alertOn = true; S('stage'); banner = { t:170, text:"Rapporte le courrier à Papa !" }; });
+      return;
+    }
+    if (hasMail && P.x < 120){
+      openDialog(PAPA_END(), () => { state = 'win'; winKind = 'mail'; PROG.done2 = true; saveProg(); score += portions*100 + 100; S('deliver'); });
+      return;
+    }
+  } else {
+    for (const it of SL.items){
+      if (!it.got && overlap(P, { x:it.x - 4, y:it.y - 4, w:16, h:16 })){
+        it.got = true; S('coin'); score += 20;
+        if (gotCount() === SL.items.length){ alertOn = true; S('stage'); banner = { t:170, text:"Tout est là ! Retourne à la cuisine !" }; }
+      }
+    }
+    if (gotCount() === SL.items.length && P.x < 150){ state = 'cook'; COOK = { t:0 }; P.vx = 0; }
+  }
+  camera += (P.x - W/2 - camera) * 0.12;
+  camera = Math.max(0, Math.min(SW - W, camera));
+}
+function cookUpdate(){
+  COOK.t++;
+  for (let i = 0; i < 6; i++) if (COOK.t === 30 + i*28) S('coin');
+  if (COOK.t === 230){
+    openDialog([
+      { who:"Tata", t:"Voilà ! Le meilleur couscous de tout Sidi Bou Saïd !" },
+      { who:"Tata", t:"À table, tout le monde ! Et pas de claquettes ce soir !" } ],
+      () => { state = 'win'; winKind = 'bonus'; score += portions*100 + 200; S('deliver'); });
+  }
+}
+
+/* dessin de la rue */
+function ingIcon(k, x, y){
+  x = Math.round(x); y = Math.round(y);
+  if (k === "Semoule"){ rect(x+1, y+2, 6, 6, "#e8cf8a"); rect(x+2, y, 4, 2, "#a88a45"); rect(x+3, y+4, 2, 1, "#c9a955"); }
+  else if (k === "Viande"){ rect(x+1, y+2, 6, 5, "#c2452d"); rect(x+2, y+3, 3, 1, "#e8735a"); rect(x+6, y+3, 2, 3, "#f6f6f0"); }
+  else if (k === "Carottes"){ rect(x+2, y+2, 4, 2, "#e8772e"); rect(x+3, y+4, 2, 2, "#e8772e"); rect(x+3, y+6, 1, 2, "#e8772e"); rect(x+2, y, 4, 2, "#3fa34d"); }
+  else if (k === "Pois chiches"){ rect(x+1, y+4, 6, 4, "#8b5a2b"); rect(x+2, y+2, 1, 2, "#d9b56a"); rect(x+4, y+1, 1, 3, "#d9b56a"); rect(x+5, y+3, 1, 1, "#d9b56a"); rect(x+3, y+3, 1, 1, "#d9b56a"); }
+  else if (k === "Courgettes"){ rect(x+1, y+3, 6, 3, "#3fa34d"); rect(x+2, y+4, 3, 1, "#7cd68a"); rect(x+6, y+2, 2, 1, "#2a7a37"); }
+  else { rect(x+2, y+2, 4, 6, "#c0392b"); rect(x+2, y+1, 4, 1, "#f2b632"); rect(x+3, y+4, 2, 2, "#f6f6f0"); }
+}
+function drawFloor(cam){
+  const y = FLOOR;
+  rect(0, y, W, 8, "#f6f6f0"); rect(0, y + 7, W, 1, "#1f5fa6");
+  for (let cx = -(cam % 8); cx < W; cx += 8){ rect(cx+3, y+2, 2, 1, "#1f5fa6"); rect(cx+2, y+3, 4, 2, "#1f5fa6"); rect(cx+3, y+5, 2, 1, "#1f5fa6"); }
+  rect(0, y + 8, W, H - y - 8, "#5b3a29");
+  for (let tx = -(cam % 16); tx < W; tx += 16)
+    for (let ty = y + 8; ty < H; ty += 16){
+      rect(tx+15, ty, 1, 16, "#3b2416"); rect(tx, ty+15, 16, 1, "#3b2416");
+      for (let r = -4; r <= 4; r++){ const half = 4 - Math.abs(r); rect(tx+8-half-1, ty+8+r, half*2+2, 1, "#c9a35a"); }
+      rect(tx+7, ty+7, 2, 2, "#7a4a2a");
+    }
+}
+function drawFacade(x, w, top, cam, door){
+  const sx = Math.round(x - cam); if (sx > W || sx + w < 0) return;
+  rect(sx, top, w, FLOOR - top, "#f8f8f4"); rect(sx + w - 5, top + 8, 5, FLOOR - top - 8, "#dde5ec");
+  rect(sx, top, w, 8, "#f6f6f0"); rect(sx, top + 7, w, 1, "#1f5fa6");
+  for (let cx = 0; cx < w; cx += 8){ rect(sx+cx+3, top+2, 2, 1, "#1f5fa6"); rect(sx+cx+2, top+3, 4, 2, "#1f5fa6"); rect(sx+cx+3, top+5, 2, 1, "#1f5fa6"); }
+  for (let wy = top + 18; wy + 18 < FLOOR - 36; wy += 34) for (let wx = sx + 12; wx < sx + w - 24; wx += 56) drawWindow(wx, wy);
+  if (door !== false) drawDoor(sx + Math.floor(w/2) - 8, FLOOR - 30);
+}
+function drawPost(cam){
+  drawFacade(2620, 270, 96, cam, false);
+  const sx = Math.round(2620 - cam); if (sx > W || sx + 270 < 0) return;
+  rect(sx + 30, 112, 210, 22, "#f2b632"); rect(sx + 30, 112, 210, 2, "#c98f10"); rect(sx + 30, 132, 210, 2, "#c98f10");
+  txt("POSTE", sx + 135, 129, 14, "#1f3a8a", "center");
+  drawDoor(sx + 113, FLOOR - 30); drawDoor(sx + 141, FLOOR - 30);
+  const mx = Math.round(POST_X - 34 - cam);
+  rect(mx, FLOOR - 26, 14, 26, "#f2b632"); rect(mx - 1, FLOOR - 27, 16, 2, "#c98f10"); rect(mx + 2, FLOOR - 22, 10, 2, "#0f2a44");
+}
+function drawStall(st, i, cam){
+  const x = Math.round(st.x - cam); if (x > W + 20 || x + st.w < -20) return;
+  rect(x - 4, 170, 2, FLOOR - 170, "#6b431f"); rect(x + st.w + 2, 170, 2, FLOOR - 170, "#6b431f");
+  rect(x, FLOOR - 14, st.w, 14, "#8b5a2b"); rect(x - 2, FLOOR - 16, st.w + 4, 3, "#a86f36"); rect(x + 2, FLOOR - 12, st.w - 4, 1, "#6b431f");
+  const goods = ["#f28c28","#d64545","#3fa34d","#f2d04a","#e07bb5"];
+  for (let k = 0; k < st.w - 6; k += 7) rect(x + 4 + k, FLOOR - 20, 5, 4, goods[(Math.floor(k/7) + i) % goods.length]);
+  for (let k = -8; k < st.w + 8; k += 8){
+    const c = (Math.floor((k + 8)/8) % 2) ? "#f6f6f0" : st.col;
+    if (st.awn){ rect(x + k, 170, 8, 6, c); rect(x + k + 1, 176, 6, 2, c); }
+    else rect(x + k, 192, 8, 4, c);
+  }
+}
+function drawCrate(cx, cam){
+  const x = Math.round(cx - cam); if (x > W || x + 26 < 0) return;
+  rect(x, FLOOR - 18, 26, 18, "#a86f36"); rect(x, FLOOR - 18, 26, 2, "#c98a4b"); rect(x, FLOOR - 1, 26, 1, "#6b431f");
+  rect(x + 12, FLOOR - 18, 2, 18, "#6b431f"); rect(x, FLOOR - 10, 26, 1, "#6b431f");
+}
+function drawStreetGame(){
+  const cam = Math.round(camera);
+  drawBG(cam);
+  drawFacade(-30, 190, 110, cam);
+  if (SL.kind === 'mail') drawPost(cam);
+  drawFloor(cam);
+  STALLS.forEach((st, i) => drawStall(st, i, cam));
+  CRATES.forEach(cx => drawCrate(cx, cam));
+  ctx.save(); ctx.translate(-cam, 0);
+  // ingrédients
+  for (const it of SL.items) if (!it.got) ingIcon(it.k, it.x, it.y + Math.sin(tick/12 + it.x)*2);
+  // Papa et le facteur
+  if (SL.kind === 'mail'){
+    sprite(PAPA_X, FLOOR - 24, PALS.Papa, 1, FRAMES[0]);
+    sprite(POST_X, FLOOR - 24, PALS.Facteur, -1, FRAMES[0]); rect(POST_X + 12, FLOOR - 13, 5, 6, "#8b5a2b"); rect(POST_X + 13, FLOOR - 12, 3, 2, "#f6f6f0");
+  }
+  // la foule
+  SL.crowd.forEach((c, i) => {
+    const pp = personPos(c); if (pp.x < cam - 20 || pp.x > cam + W + 20) return;
+    const by = -(Math.floor(tick/8 + i) % 2);
+    sprite(pp.x, FLOOR - 24 + by, c.pal, pp.dir, c.female ? MOMF[0] : FRAMES[Math.floor(tick/10 + i) % 2]);
+  });
+  // les policiers
+  for (const c of SL.police){
+    if (c.extra && !alertOn) continue; if (c.x < cam - 30 || c.x > cam + W + 30) continue;
+    sprite(c.x, FLOOR - 24, PALS.Police, c.dir, FRAMES[Math.floor(tick/(c.mode === 'chase' ? 5 : 9)) % 2]);
+    rect(c.x + 9, FLOOR - 12, 2, 2, "#f2b632");
+    if (c.mode === 'chase' && Math.floor(tick/6) % 2) txt("!", c.x + 6, FLOOR - 28, 14, "#ff4d4d", "center");
+  }
+  // le joueur
+  const visible = !(player.inv > 0 && Math.floor(tick/4) % 2), nm = me();
+  if (visible && state !== 'cook'){
+    sprite(player.x, player.y, PALS[nm], player.dir, FR(nm, player.moving ? Math.floor(tick/6) % 2 : 0));
+    if (hasMail){
+      const ey = Math.round(player.y - 12 + Math.sin(tick/10)*1.5), ex = Math.round(player.x);
+      rect(ex + 1, ey, 10, 7, "#ffffff"); rect(ex + 1, ey, 10, 1, "#c9d4de"); rect(ex + 2, ey + 1, 2, 1, "#c9d4de"); rect(ex + 8, ey + 1, 2, 1, "#c9d4de"); rect(ex + 4, ey + 2, 4, 1, "#c9d4de"); rect(ex + 5, ey + 4, 2, 2, "#e11d48");
+    }
+    txt(nm, player.x + 6, player.y - (hasMail ? 15 : 4), 8, heroCol(nm), "center");
+  } else if (state === 'cook') { sprite(player.x, player.y, PALS[nm], -1, FR(nm, 0)); txt(nm, player.x + 6, player.y - 4, 8, heroCol(nm), "center"); }
+  ctx.restore();
+
+  // la marmite (scène de cuisine)
+  if (COOK){
+    const px = Math.round(72 - cam);
+    rect(px - 4, FLOOR - 14, 30, 14, "#8b5a2b"); rect(px - 6, FLOOR - 16, 34, 3, "#a86f36");
+    rect(px, FLOOR - 32, 22, 16, "#9aa7b5"); rect(px + 2, FLOOR - 30, 3, 12, "#c9d4de"); rect(px - 1, FLOOR - 34, 24, 3, "#c0cad6"); rect(px + 9, FLOOR - 37, 4, 3, "#6b431f");
+    for (let k = 0; k < 4; k++) rect(px + 5 + k*4 + Math.round(Math.sin(tick/7 + k)*2), FLOOR - 40 - ((tick/3 + k*7) % 22), 3, 3, "rgba(255,255,255,.75)");
+    for (let i = 0; i < 6; i++){
+      const st = 30 + i*28, q = (COOK.t - st) / 24;
+      if (q >= 0 && q < 1) ingIcon(ING[i].k, px + 7, FLOOR - 90 + q*52);
+      if (q >= 0 && q < 2.4) txt(ING[i].k + " !", W/2, 90, 12, "#f2b632", "center");
+    }
+  }
+
+  // flèche vers l'objectif
+  let tx = null, tl = "";
+  if (state === 'play'){
+    if (SL.kind === 'mail'){ tx = hasMail ? PAPA_X : POST_X; tl = hasMail ? "PAPA" : "POSTE"; }
+    else if (gotCount() < SL.items.length){
+      const left = SL.items.filter(i => !i.got).sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0]; tx = left.x; tl = left.k;
+    } else { tx = 110; tl = "CUISINE"; }
+    const sx = tx - cam;
+    if (sx > W - 8) txt(tl + " >>", W - 6, 120, 10, "#f2b632", "right");
+    else if (sx < 8) txt("<< " + tl, 6, 120, 10, "#f2b632", "left");
+  }
+
+  // interface
+  ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(4, 4, 196, 56);
+  txt(SL.kind === 'mail' ? "Niveau 2 : Le courrier" : "Bonus : Chez Tata", 10, 16, 9, "#fff");
+  for (let i = 0; i < MAXP; i++) heart(10 + i*11, 21, i < portions ? "#e11d48" : "#3a4b5e");
+  if (SL.kind === 'market'){
+    ING.forEach((g, i) => { if (!SL.items[i].got) ctx.globalAlpha = 0.28; ingIcon(g.k, 10 + i*12, 33); ctx.globalAlpha = 1; });
+    txt(gotCount() < SL.items.length ? `Ingrédients : ${gotCount()}/${SL.items.length}` : "Retourne à la cuisine !", 10, 55, 8, "#f3d58a");
+  } else txt(hasMail ? "Rapporte le courrier à Papa !" : "Va chercher le courrier à la poste !", 10, 40, 8, "#f3d58a");
+  if (banner && banner.t > 0){
+    ctx.fillStyle = "rgba(15,42,68,.85)"; ctx.fillRect(W/2 - 150, 66, 300, 20);
+    txt(banner.text, W/2, 80, 10, "#f2b632", "center");
+  }
+  if (state === 'win') drawWin();
+}
+function drawWin(){
+  ctx.fillStyle = "rgba(15,42,68,.9)"; ctx.fillRect(0, 0, W, H);
+  if (winKind === 'roof'){
+    txt("Maman est ravie !", W/2, 105, 26, "#f2b632", "center");
+    txt(`Couscous livré : ${portions}/${MAXP} portions`, W/2, 140, 12, "#fff", "center");
+    txt(`Score final : ${score}  -  ${collected} dinars`, W/2, 160, 12, "#fff", "center");
+    txt("Entrée ou toucher : niveau 2, le courrier de Papa", W/2, 195, 9, "#8ec5e8", "center");
+  } else if (winKind === 'mail'){
+    txt("Papa est content !", W/2, 100, 26, "#f2b632", "center");
+    txt(`Courrier livré avec ${portions}/${MAXP} vies`, W/2, 135, 12, "#fff", "center");
+    txt(`Score : ${score}`, W/2, 155, 12, "#fff", "center");
+    if (bonusUnlocked()) txt("Niveau bonus débloqué : Tata !", W/2, 178, 11, "#7ee08a", "center");
+    txt(bonusUnlocked() ? "Entrée ou toucher : jouer le bonus" : "Entrée ou toucher : menu", W/2, 205, 9, "#8ec5e8", "center");
+  } else {
+    txt("Le couscous est prêt !", W/2, 100, 26, "#f2b632", "center");
+    txt("Merci Tata !", W/2, 132, 14, "#e9c9ff", "center");
+    txt(`Score final : ${score}`, W/2, 156, 12, "#fff", "center");
+    txt("Un jeu de Youssef Kalai", W/2, 182, 10, "#ffd166", "center");
+    txt("Entrée ou toucher : retour au menu", W/2, 208, 9, "#8ec5e8", "center");
+  }
+}
+function winAction(){
+  if (winKind === 'roof') startStreet('mail', true, false);
+  else if (winKind === 'mail' && bonusUnlocked()) startStreet('market', true, false);
+  else state = 'title';
+}
+
+/* ---------- État ---------- */
+let li = 0, level, player, friends, coins, camera = 0, history, score = 0, collected = 0, portions = MAXP;
+let state = 'title', tick = 0, stageT = 0, deliverT = 0, safe, CS = null, fadeIn = 0;
+const keys = { left:false, right:false, jump:false };
+
+function loadLevel(i){
+  li = i; const L = LEVELS[i];
+  let x = 0; const houses = L.houses.map(([w,y,gap]) => { const h = { x, y, w, gap }; x += w + gap; return h; });
+  const last = houses[houses.length-1];
+  level = { name:L.name, houses, width:last.x + last.w,
+    rects: houses.map(h => ({ x:h.x, y:h.y, w:h.w, h:STREET - h.y })),
+    cacti: L.cacti.map(([hi, off]) => ({ x:houses[hi].x + off, y:houses[hi].y })),
+    gulls: L.gulls.map(hi => { const h = houses[hi], n = houses[hi+1];
+      return { cx:h.x + h.w + h.gap/2, cy:Math.min(h.y, n.y) - 38, amp:h.gap/2 + 15, ph:hi }; }),
+    flagX: last.x + last.w - 24, flagY: last.y,
+    mom: i === LEVELS.length - 1 ? { x:last.x + last.w - 44, y:last.y } : null };
+  coins = [];
+  houses.forEach((h, hi) => {
+    for (let j = 0; j < Math.floor(h.w/40); j++)
+      if (hi > 0 && hh(hi*5 + j + i*99) > 0.45) coins.push({ x:h.x + 24 + j*36, y:h.y - 14, got:false });
+    const n = houses[hi+1];
+    if (n){ const mx = h.x + h.w + h.gap/2, my = Math.min(h.y, n.y) - 46;
+      coins.push({ x:mx-14, y:my+6, got:false }, { x:mx, y:my, got:false }, { x:mx+14, y:my+6, got:false }); }
+  });
+  portions = MAXP; camera = 0;
+  safe = { x:30, y:houses[0].y - 24, house:0 };
+  respawn();
+}
+function respawn(){
+  player = { x:safe.x, y:safe.y - 1, w:12, h:24, vx:0, vy:0, onGround:false, dir:1, moving:false, inv:60, kb:0, kdir:1, house:null };
+  const minX = level.houses[safe.house].x;
+  const cs2 = comps(); friends = [ { name:cs2[0], delay:16 }, { name:cs2[1], delay:32 } ];
+  history = [];
+  for (let k = 0; k < 40; k++) history.push({ x:Math.max(minX, player.x - (39-k)*2.5), y:player.y, dir:1, moving:false });
+  for (const f of friends){ const h = history[39 - f.delay]; f.x = h.x; f.y = h.y; f.dir = 1; f.moving = false; }
+}
+function startGame(){ MODE = 'roof'; score = 0; collected = 0; SCRIPT = buildScript(); loadLevel(0); state = 'cutscene'; CS = { i:0, typed:0, acc:0, phase:'talk', t:0, bar:0 }; }
+function gullPos(g){
+  const a = tick*0.03 + g.ph;
+  return { x:g.cx + Math.sin(a)*g.amp, y:g.cy + Math.sin(tick*0.08 + g.ph)*6, dir:Math.cos(a) >= 0 ? 1 : -1 };
+}
+function hurt(fromX){
+  if (player.inv > 0) return;
+  portions--; player.inv = 90; player.vy = -4; player.kb = 8; player.kdir = player.x < fromX ? -1 : 1;
+  if (portions <= 0) setLost(); else S('hurt');
+}
+
+/* ---------- Mise à jour ---------- */
+function update(){
+  tick++;
+  if (fadeIn > 0) fadeIn--;
+  if (state === 'credits') creditsT++;
+  if (AC && tick % 30 === 0) musicG.gain.setTargetAtTime(['title','select','levels','credits','cutscene','dialog'].includes(state) ? 0.18 : 0.3, AC.currentTime, 0.3);
+  if (state === 'cutscene'){ cutUpdate(); return; }
+  if (state === 'lost'){ lostUpdate(); return; }
+  if (state === 'dialog'){ dlgUpdate(); return; }
+  if (state === 'cook'){ cookUpdate(); return; }
+  if (state === 'play' && MODE !== 'roof'){ updateStreet(); return; }
+  if (state === 'stage'){ if (--stageT <= 0){ loadLevel(li + 1); state = 'play'; } return; }
+  if (state === 'deliver'){ if (++deliverT > 230){ state = 'win'; winKind = 'roof'; PROG.done1 = true; saveProg(); } return; }
+  if (state !== 'play') return;
+
+  if (player.inv > 0) player.inv--;
+  player.vx = ((keys.right?1:0) - (keys.left?1:0)) * SPEED;
+  if (player.kb > 0){ player.vx = player.kdir * 2; player.kb--; }
+  if (player.vx && !player.kb) player.dir = Math.sign(player.vx);
+  if (keys.jump && player.onGround){ player.vy = -JUMP; player.onGround = false; S('jump'); }
+  player.vy = Math.min(player.vy + G, 9);
+
+  player.x += player.vx;
+  if (player.x < 0) player.x = 0;
+  for (const r of level.rects) if (overlap(player, r)){ if (player.vx > 0) player.x = r.x - player.w; else if (player.vx < 0) player.x = r.x + r.w; }
+  player.y += player.vy; player.onGround = false; player.house = null;
+  level.rects.forEach((r, idx) => {
+    if (overlap(player, r)){
+      if (player.vy > 0){ player.y = r.y - player.h; player.onGround = true; player.house = idx; }
+      else if (player.vy < 0) player.y = r.y + r.h;
+      player.vy = 0;
+    }
+  });
+  player.moving = player.onGround && player.vx !== 0;
+
+  if (player.onGround && player.house !== null){
+    const h = level.houses[player.house];
+    if (player.x > h.x + 6 && player.x + player.w < h.x + h.w - 6) safe = { x:player.x, y:player.y, house:player.house };
+  }
+  // Chute dans la ruelle : une portion de couscous renversée
+  if (player.y + player.h >= STREET - 1){
+    portions--; if (portions <= 0){ setLost(); return; }
+    S('fall'); respawn(); return;
+  }
+  for (const c of level.cacti) if (overlap(player, { x:c.x+1, y:c.y-8, w:8, h:8 })) hurt(c.x + 5);
+  for (const g of level.gulls){ const p = gullPos(g); if (overlap(player, { x:p.x-6, y:p.y-2, w:12, h:8 })) hurt(p.x); }
+  if (state !== 'play') return;
+
+  for (const c of coins)
+    if (!c.got && overlap(player, { x:c.x-6, y:c.y-6, w:12, h:12 })){ c.got = true; score += 10; collected++; S('coin'); }
+
+  history.push({ x:player.x, y:player.y, dir:player.dir, moving:player.moving });
+  if (history.length > 120) history.shift();
+  for (const f of friends){
+    const h = history[Math.max(0, history.length - 1 - f.delay)];
+    f.x = h.x; f.y = h.y; f.dir = h.dir; f.moving = h.moving;
+  }
+
+  if (level.mom){
+    if (player.x + player.w >= level.mom.x - 6){ state = 'deliver'; deliverT = 0; score += portions * 100; S('deliver'); }
+  } else if (player.x > level.flagX){ score += 50; state = 'stage'; stageT = 130; S('stage'); }
+
+  camera += (player.x - W/3 - camera) * 0.12;
+  camera = Math.max(0, Math.min(level.width - W, camera));
+}
+
+/* ---------- Dessin ---------- */
+function drawGame(){
+  const cam = Math.round(camera);
+  drawBG(cam); drawStreet(cam);
+  for (const h of level.houses) drawHouse(h, cam);
+  for (const c of level.cacti) drawCactus(c, cam);
+  for (const c of coins){
+    if (c.got) continue;
+    const x = Math.round(c.x - cam - 4), y = Math.round(c.y - 4 + Math.sin(tick/15 + c.x)*2);
+    rect(x+2, y, 4, 8, "#c98f10"); rect(x, y+2, 8, 4, "#c98f10");
+    rect(x+1, y+1, 6, 6, "#f2b632"); rect(x+2, y+2, 2, 2, "#fff3c4"); rect(x+3, y+3, 2, 3, "#d89b16");
+  }
+  if (!level.mom) drawFlag(level.flagX, level.flagY);
+  if (li === 0){
+    ctx.save(); ctx.translate(-cam, 0); sprite(110, level.houses[0].y - 24, PALS.Tata, -1, MOMF[Math.floor(tick/14) % 2]); ctx.restore();
+    txt("Tata", 116 - cam, level.houses[0].y - 30, 8, "#e9c9ff", "center");
+  }
+
+  // Maman
+  let momBowl = false;
+  if (level.mom){
+    const m = level.mom, mx = m.x - cam, wave = Math.floor(tick/14) % 2;
+    ctx.save(); ctx.translate(-m.x + mx, 0);
+    sprite(m.x, m.y - 24, PALS.Maman, -1, MOMF[state === 'deliver' || state === 'win' ? wave : 0]); ctx.restore();
+    momBowl = (state === 'deliver' && deliverT >= 40) || state === 'win';
+    txt("Maman", mx + 6, m.y - (momBowl ? 46 : 30), 8, "#ffd1e3", "center");
+    if (momBowl) bowl(mx + 6, m.y - 27, portions);
+  }
+
+  const fr = m => m ? Math.floor(tick/6) % 2 : 0;
+  for (let i = friends.length - 1; i >= 0; i--){
+    const f = friends[i], px = f.x - cam;
+    ctx.save(); ctx.translate(-f.x + px, 0); sprite(f.x, f.y, PALS[f.name], f.dir, FR(f.name, fr(f.moving))); ctx.restore();
+    txt(f.name, px + 6, f.y - 4, 8, "#fff", "center");
+  }
+  const visible = !(player.inv > 0 && Math.floor(tick/4) % 2);
+  if (visible){
+    const px = player.x - cam, frame = fr(player.moving);
+    ctx.save(); ctx.translate(-player.x + px, 0); sprite(player.x, player.y, PALS[HERO], player.dir, FR(HERO, frame)); ctx.restore();
+    if (!momBowl) bowl(px + 6, player.y - 3 + frame, portions);
+    txt(HERO, px + 6, player.y - (momBowl ? 4 : 24), 8, heroCol(HERO), "center");
+  }
+  for (const g of level.gulls) drawGull(g, cam);
+
+  // Interface
+  ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(4, 4, 190, 50);
+  txt(`Étape ${li+1}/${LEVELS.length} : ${level.name}`, 10, 16, 9, "#fff");
+  txt(`Dinars ${collected}   Score ${score}`, 10, 28, 9, "#f2b632");
+  txt("Couscous", 10, 41, 9, "#f3d58a");
+  for (let i = 0; i < MAXP; i++){
+    const bx = 74 + i*18; rect(bx, 34, 14, 3, i < portions ? "#8b5a2b" : "#3a4b5e");
+    rect(bx+1, 31, 12, 3, i < portions ? "#f3d58a" : "#3a4b5e");
+  }
+  txt("Porte-le à Maman !", 10, 51, 8, "#8ec5e8");
+
+  if (state === 'title'){
+    ctx.fillStyle = "rgba(15,42,68,.75)"; ctx.fillRect(0, 60, W, 150);
+    txt("SIDI RUNNER", W/2, 105, 34, "#f6f6f0", "center");
+    txt("Le couscous de Maman", W/2, 130, 14, "#f2b632", "center");
+    txt("Saute de toit en toit sans renverser le plat !", W/2, 158, 9, "#fff", "center");
+    txt("Sidi Bousaid  -  100% Mloukhiya", W/2, 174, 8, "#8ec5e8", "center");
+    if (Math.floor(tick/30) % 2) txt("Appuie sur Entrée ou touche l'écran", W/2, 198, 10, "#fff", "center");
+  }
+  if (state === 'stage'){
+    ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(0, 90, W, 90);
+    txt(`Étape ${li+1} terminée !`, W/2, 125, 20, "#f2b632", "center");
+    txt("Tata te fait passer du couscous par la fenêtre !", W/2, 150, 10, "#fff", "center");
+  }
+  if (state === 'deliver'){
+    txt((HERO === "Nour" ? "Merci ma fille !" : "Merci mon fils !"), Math.min(level.mom.x - cam - 4, W - 62), level.mom.y - 60, 11, "#ffd1e3", "center");
+    for (let i = 0; i < 5; i++){
+      const t = (deliverT*0.7 + i*22) % 90;
+      heart(level.mom.x - cam - 18 + i*10 + Math.sin(t/8 + i)*4, level.mom.y - 74 - t*0.4, i%2 ? "#e0559a" : "#ff8fb8");
+    }
+  }
+  if (state === 'lost'){
+    ctx.fillStyle = "rgba(15,42,68,.88)"; ctx.fillRect(0,0,W,H);
+    txt("Le couscous est renversé !", W/2, 120, 22, "#f2b632", "center");
+    txt("Maman va attendre encore un peu...", W/2, 148, 10, "#fff", "center");
+    txt("Entrée ou toucher l'écran pour réessayer", W/2, 185, 10, "#8ec5e8", "center");
+  }
+  if (state === 'win') drawWin();
+}
+function draw(){
+  if (state === 'cutscene') drawCutscene();
+  else if (state === 'lost') drawLost();
+  else if (state === 'title') drawMenu();
+  else if (state === 'select') drawSelect();
+  else if (state === 'levels') drawLevels();
+  else if (state === 'credits') drawCredits();
+  else if (MODE !== 'roof'){ drawStreetGame(); if (state === 'dialog') drawDlgBox(); }
+  else drawGame();
+  drawFadeAndMute();
+}
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+/* ---------- Contrôles ---------- */
+const map = { ArrowLeft:'left', a:'left', q:'left', ArrowRight:'right', d:'right', ArrowUp:'jump', w:'jump', z:'jump', ' ':'jump' };
+function confirm(){
+  if (state === 'title') menuActivate();
+  else if (state === 'select'){ HERO = CHARS[selIdx]; saveHero(); S('select'); state = 'title'; menuSel = 0; }
+  else if (state === 'levels') levelStart(selLvl);
+  else if (state === 'credits'){ S('select'); state = 'title'; }
+  else if (state === 'win') winAction();
+  else if (state === 'lost'){ if (MODE === 'roof'){ loadLevel(li); state = 'play'; } else startStreet(MODE, false, false); }
+  else if (state === 'cutscene') cutAdvance();
+  else if (state === 'dialog') dlgAdvance();
+}
+function navKey(dir){       // dir = -1 (gauche/haut) ou +1 (droite/bas)
+  S('select');
+  if (state === 'title') menuSel = (menuSel + MENU.length + dir) % MENU.length;
+  else if (state === 'select') selIdx = (selIdx + 3 + dir) % 3;
+  else if (state === 'levels') selLvl = (selLvl + 3 + dir) % 3;
+}
+addEventListener('keydown', e => {
+  initAudio();
+  if (map[e.key]){ keys[map[e.key]] = true; e.preventDefault(); }
+  if (state === 'title'){
+    if (['ArrowUp','w','z'].includes(e.key)) navKey(-1);
+    if (['ArrowDown','s'].includes(e.key)) navKey(1);
+  } else if (state === 'select' || state === 'levels'){
+    if (['ArrowLeft','a','q','ArrowUp'].includes(e.key)) navKey(-1);
+    if (['ArrowRight','d','ArrowDown'].includes(e.key)) navKey(1);
+  }
+  if ((e.key === 'Enter' || (e.key === ' ' && state !== 'play')) && !e.repeat) confirm();
+  if (e.key === 'Escape'){ if (state === 'select' || state === 'credits' || state === 'levels') state = 'title'; else cutSkip(); }
+  if (e.key === 'm' || e.key === 'M') toggleMute();
+});
+addEventListener('keyup', e => { if (map[e.key]) keys[map[e.key]] = false; });
+function padNav(k){         // boutons tactiles ◀ ▶ ▲ dans les menus et dialogues
+  if (state === 'play') return;
+  if ((state === 'title' || state === 'select' || state === 'levels') && k !== 'jump') navKey(k === 'left' ? -1 : 1);
+  else if (k === 'jump') confirm();
+}
+[['bl','left'],['br','right'],['bj','jump']].forEach(([id,k]) => {
+  const b = document.getElementById(id);
+  const on = e => { initAudio(); keys[k] = true; padNav(k); e.preventDefault(); }, off = e => { keys[k] = false; e.preventDefault(); };
+  b.addEventListener('touchstart', on); b.addEventListener('touchend', off); b.addEventListener('touchcancel', off);
+  b.addEventListener('mousedown', on); b.addEventListener('mouseup', off); b.addEventListener('mouseleave', off);
+});
+cv.addEventListener('pointerdown', e => {
+  initAudio();
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+  if (x > W - 66 && y < 22){ toggleMute(); return; }
+  if ((state === 'select' || state === 'levels') && x < 74 && y > 238 && y < 260){ S('select'); state = 'title'; return; }
+  if (state === 'title'){
+    for (let i = 0; i < MENU.length; i++)
+      if (x > W/2 - 100 && x < W/2 + 100 && y > MENU_Y[i] - 13 && y < MENU_Y[i] + 7){ menuSel = i; menuActivate(); return; }
+    return;
+  }
+  if (state === 'select' || state === 'levels'){
+    for (let i = 0; i < 3; i++)
+      if (x > CX[i] && x < CX[i] + 120 && y > 48 && y < 212){
+        if (state === 'select'){ selIdx = i; confirm(); } else { selLvl = i; confirm(); }
+        return;
+      }
+    return;
+  }
+  confirm();
+});
+
+loadLevel(0); loop();
+</script>
+</body>
+</html>
