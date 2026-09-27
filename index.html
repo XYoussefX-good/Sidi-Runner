@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Sidi Runner : le couscous de Maman - Youssef Kalai</title>
+<title>Sidi Runner : Le jeu d'un grande famille - Youssef Kalai</title>
 <style>
   :root { --ink:#0f2a44; --wash:#8ec5e8; --gold:#f2b632; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -26,12 +27,27 @@
   <div><button id="bl">◀</button><button id="br">▶</button></div>
   <div><button id="bj">▲</button></div>
 </div>
-
+<input id="nameInput" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false"
+  style="position:absolute; opacity:1; color:transparent; background:transparent; caret-color:#ffe27a; border:0; outline:none; left:-9999px; top:-9999px; width:100px; height:24px; font-size:16px;">
+<input id="pinInput" maxlength="20" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"
+  style="position:absolute; opacity:1; color:transparent; background:transparent; caret-color:#ffe27a; border:0; outline:none; left:-9999px; top:-9999px; width:100px; height:24px; font-size:16px;">
+ 
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let mouseX = -1, mouseY = -1;
+cv.addEventListener('mousemove', e => {
+  const r = cv.getBoundingClientRect();
+  mouseX = (e.clientX - r.left) * 480 / r.width;
+  mouseY = (e.clientY - r.top) * 270 / r.height;
+  let hot = false;
+  if (state === 'login') hot = (mouseX > 170 && mouseX < 310 && mouseY > 164 && mouseY < 184) || (mouseY > 194 && mouseY < 206);
+  else if (state === 'newaccount') hot = (mouseX > 170 && mouseX < 310 && mouseY > 150 && mouseY < 170) || (mouseY > 180 && mouseY < 192);
+  cv.style.cursor = hot ? 'pointer' : 'default';
+});
+cv.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
 const W = 480, H = 270, STREET = 250;
 const G = 0.3, SPEED = 2.5, JUMP = 6.5, MAXP = 3;
-
+ 
 /* ---------- Niveaux : chaque maison = [largeur, hauteur du toit, écart avant la suivante] ---------- */
 const LEVELS = [
   { name:"Ruelle blanche",
@@ -44,7 +60,7 @@ const LEVELS = [
     houses:[[110,180,60],[70,160,75],[60,135,70],[70,115,70],[60,140,80],[80,165,75],[60,145,70],[70,120,75],[60,100,70],[70,130,80],[80,160,70],[60,140,80],[70,170,75],[160,150,0]],
     gulls:[2,5,8,11], cacti:[[5,30],[10,40]] }
 ];
-
+ 
 /* ---------- Sprites pixel art (16×24) ---------- */
 const BODY = [
 "................",".....FFFFFF.....","....FFFFFFFF....","....FFFFFFFF.T..","....ffffffff.T..","....SSSSSSSS.T..",
@@ -61,7 +77,7 @@ const GBODY = [
 "...RWWWGGWWWR...","..SWWWWGGWWWWS..","...WWWWGGWWWW...","..WWWWWGGWWWWW..",".WWWWWWGGWWWWWW.",".WWWWWWWWWWWWWW.",".GGGGGGGGGGGGGG."];
 const GFRAMES = LEGS.map(l => GBODY.concat(l).map(r => r.padEnd(16,'.')));
 function FR(name, k){ return (name === 'Nour' ? GFRAMES : name === 'Tata' ? TFRAMES : FRAMES)[k]; }
-
+ 
 const MOM0 = [
 "................",".....HHHHHH.....","....HHHHHHHH....","....HHHHHHHHH...","....HSSSSSSHH...","....HSMSSMSHH...",
 "....HSSSSSSHH...","....HSSSMSSHH...",".....HSSSSHH....","....HHHHHHHH....","...DDDDGGDDDD...","..DDDDDGGDDDDD..",
@@ -72,7 +88,7 @@ MOM1[6] = "....HSSSSSSHH.S."; MOM1[7] = "....HSSSMSSHH.S."; MOM1[8] = ".....HSSS
 MOM1[9] = "....HHHHHHHH.D.."; MOM1[12] = "..SDDDDGDDDDD...";
 const MOMF = [MOM0, MOM1];
 const TFRAMES = [MOM0, MOM0.slice(0,22).concat(["...BB......BB...","..BBB......BBB.."])];
-
+ 
 const BASE_PAL = { S:"#e8b48a", M:"#2b1a12", P:"#2d3748", B:"#1a202c", T:"#111111", G:"#d4a017" };
 const PALS = {
   Ahmed:   { ...BASE_PAL, F:"#c8102e", f:"#8f0a20", W:"#f3ead2", w:"#d8ccae" },
@@ -96,7 +112,7 @@ function sprite(x, y, pal, dir, rows){
       ctx.fillStyle = col; ctx.fillRect(ox + (dir >= 0 ? c : 15 - c), oy + r, 1, 1);
     }
 }
-
+ 
 /* ---------- Utilitaires ---------- */
 function hh(n){ n = (n*374761393 + 668265263)|0; n = Math.imul(n ^ (n>>>13), 1274126177); return ((n ^ (n>>>16))>>>0)/4294967296; }
 function rect(x,y,w,h,c){ ctx.fillStyle = c; ctx.fillRect(Math.round(x),Math.round(y),w,h); }
@@ -106,7 +122,7 @@ function txt(s, x, y, size, color, align){
   ctx.fillStyle = color || "#fff"; ctx.fillText(s, Math.round(x), Math.round(y));
 }
 function overlap(a, b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
-
+ 
 /* ---------- Couscous ---------- */
 function bowl(cx, by, n){
   cx = Math.round(cx); by = Math.round(by);
@@ -123,7 +139,7 @@ function bowl(cx, by, n){
 function heart(x, y, c){
   rect(x+1,y,2,1,c); rect(x+4,y,2,1,c); rect(x,y+1,7,2,c); rect(x+1,y+3,5,1,c); rect(x+2,y+4,3,1,c); rect(x+3,y+5,1,1,c);
 }
-
+ 
 /* ---------- Décor ---------- */
 function drawWindow(wx, wy){
   rect(wx-3, wy+2, 3, 14, "#2b6fb5"); rect(wx+12, wy+2, 3, 14, "#2b6fb5");
@@ -212,8 +228,8 @@ function drawFlag(x, y){
   rect(x+11, y-46, 8, 10, "#f6f6f0"); rect(x+9, y-44, 12, 6, "#f6f6f0"); rect(x+10, y-45, 10, 8, "#f6f6f0");
   rect(x+14, y-43, 4, 4, "#e70013"); rect(x+16, y-42, 2, 2, "#f6f6f0");
 }
-
-
+ 
+ 
 /* ---------- Son (synthétisé, aucun fichier audio) ---------- */
 let AC = null, master, musicG, sfxG, noiseBuf, muted = false, nextT = 0, mstep = 0;
 const SC = [293.66,311.13,369.99,392,440,466.16,523.25,587.33];   // gamme Hijaz sur ré
@@ -226,7 +242,7 @@ function initAudio(){
   try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
   master = AC.createGain(); master.gain.value = muted ? 0 : 0.8; master.connect(AC.destination);
   musicG = AC.createGain(); musicG.gain.value = 0.18; musicG.connect(master);
-  sfxG = AC.createGain(); sfxG.gain.value = 0.7; sfxG.connect(master);
+  sfxG = AC.createGain(); sfxG.gain.value = 0.7 * (SETTINGS.sfx / 10); sfxG.connect(master);
   noiseBuf = AC.createBuffer(1, Math.floor(AC.sampleRate*0.2), AC.sampleRate);
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
   nextT = AC.currentTime + 0.1; mstep = 0;
@@ -286,7 +302,7 @@ function toggleMute(){ muted = !muted; if (master) master.gain.value = muted ? 0
 document.addEventListener('visibilitychange', () => {
   if (!AC) return; if (document.hidden) AC.suspend(); else AC.resume();
 });
-
+ 
 /* ---------- Cinématique d'introduction ---------- */
 let SCRIPT = [];
 function buildScript(){
@@ -350,7 +366,7 @@ function drawCutscene(){
   if (CS.phase === 'talk') bowl(116, ay - 3 + bob("Tata"), MAXP);
   else if (CS.phase === 'give'){ const p = CS.t / 60; bowl(116 + (80 - 116)*p, ay - 3 - Math.sin(p*Math.PI)*16, MAXP); }
   else bowl(80, ay - 3, MAXP);
-
+ 
   const bar = Math.round(24 * CS.bar);
   rect(0, 0, W, bar, "#000"); rect(0, H - bar, W, bar, "#000");
   if (CS.phase === 'talk'){
@@ -372,8 +388,8 @@ function drawFadeAndMute(){
   ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(W-62, 4, 58, 14);
   txt(muted ? "Son OFF" : "Son ON", W-8, 15, 8, muted ? "#ff8fa3" : "#8ec5e8", "right");
 }
-
-
+ 
+ 
 /* ---------- Scène de défaite : Maman et Tata sont furieuses ---------- */
 let lostT = 0;
 let LOST_LINES = [], LOSTCFG = { victims:[], angry:[], lines:[] };
@@ -454,19 +470,106 @@ function drawLost(){
   txt("Le couscous est renversé !", W/2, 16, 10, "#f2b632", "center");
   if (lostT > 40 && Math.floor(tick/25) % 2) txt("Entrée ou toucher l'écran : réessayer", W/2, 262, 9, "#8ec5e8", "center");
 }
-
-
+ 
+ 
 /* ---------- Menu, choix du joueur, crédits ---------- */
+/* ---------- Comptes : un compte administrateur (accès à tout), les autres avancent normalement ---------- */
+let ACCOUNTS = {};
+try { ACCOUNTS = JSON.parse(localStorage.getItem('sidiAccounts') || '{}'); } catch(e){ ACCOUNTS = {}; }
+if (!ACCOUNTS['Youssef Kalai']) ACCOUNTS['Youssef Kalai'] = { admin:true, hero:'Ahmed', prog:{ done1:true, done2:true } };
+if (!ACCOUNTS['Youssef Kalai'].password){
+  let legacyPin = null; try { legacyPin = localStorage.getItem('sidiAdminPin'); } catch(e){}
+  if (legacyPin) ACCOUNTS['Youssef Kalai'].password = legacyPin;
+}
+function saveAccounts(){ try { localStorage.setItem('sidiAccounts', JSON.stringify(ACCOUNTS)); } catch(e){} }
+let CURRENT = null;
+try { const c = localStorage.getItem('sidiCurrentAccount'); if (c && ACCOUNTS[c]) CURRENT = c; } catch(e){}
+function saveCurrent(){ try { localStorage.setItem('sidiCurrentAccount', CURRENT); } catch(e){} }
+function isAdmin(){ return !!(ACCOUNTS[CURRENT] && ACCOUNTS[CURRENT].admin); }
+function accountNames(){
+  return [...Object.keys(ACCOUNTS).sort((a,b) => (ACCOUNTS[b].admin - ACCOUNTS[a].admin) || a.localeCompare(b)), '__new__'];
+}
+function syncProgFromAccount(){
+  if (!CURRENT || !ACCOUNTS[CURRENT]) return;
+  const a = ACCOUNTS[CURRENT];
+  PROG.done1 = a.admin ? true : !!a.prog.done1;
+  PROG.done2 = a.admin ? true : !!a.prog.done2;
+}
+function placeField(input, vx, vy, vw, vh){
+  const r = cv.getBoundingClientRect(), sx = r.width / W, sy = r.height / H;
+  input.style.left = Math.round(r.left + window.scrollX + vx*sx) + 'px';
+  input.style.top = Math.round(r.top + window.scrollY + vy*sy) + 'px';
+  input.style.width = Math.max(4, Math.round(vw*sx)) + 'px';
+  input.style.height = Math.max(4, Math.round(vh*sy)) + 'px';
+  input.style.pointerEvents = 'auto';
+}
+function hideField(input){ input.style.pointerEvents = 'none'; input.style.left = '-9999px'; input.style.top = '-9999px'; }
+function blurFields(){ nameInput.blur(); pinInput.blur(); hideField(nameInput); hideField(pinInput); }
+function switchAccount(nm){
+  CURRENT = nm; saveCurrent(); syncProgFromAccount(); HERO = ACCOUNTS[nm].hero || 'Ahmed';
+  blurFields(); S('deliver'); state = 'title'; menuSel = 0;
+}
+let accMsg = '', accMsgT = 0;
+let loginMsg = '', loginMsgT = 0;
+function doLogin(){
+  const u = nameInput.value.trim(), pw = pinInput.value, a = ACCOUNTS[u];
+  if (!a){ loginMsg = "Compte introuvable"; loginMsgT = 90; return; }
+  if (!a.password){ pinTemp = pw; pinBuffer = ''; pinInput.value = ''; pinMode = 'setup2'; pinTarget = u; pinPurpose = 'firstlogin'; pinMsgT = 0; blurFields(); state = 'adminpin'; pinInput.focus(); return; }
+  if (a.password !== pw){ loginMsg = "Mot de passe incorrect"; loginMsgT = 90; pinInput.value = ''; return; }
+  switchAccount(u);
+}
+function goToNewAccount(){ accMsgT = 0; S('select'); state = 'newaccount'; nameInput.value = ''; pinInput.value = ''; nameInput.focus(); }
+function doCreateAccount(){
+  const u = nameInput.value.trim(), pw = pinInput.value;
+  if (!u){ accMsg = "Entre un nom d'utilisateur"; accMsgT = 90; return; }
+  if (ACCOUNTS[u]){ accMsg = "Ce nom existe déjà"; accMsgT = 90; return; }
+  if (pw.length < 4){ accMsg = "Mot de passe trop court (4 min.)"; accMsgT = 90; return; }
+  ACCOUNTS[u] = { admin:false, hero:'Ahmed', prog:{ done1:false, done2:false }, password:pw };
+  saveAccounts();
+  CURRENT = u; saveCurrent(); syncProgFromAccount(); HERO = 'Ahmed'; saveHero();
+  blurFields(); state = 'title'; menuSel = 0;
+}
+let pinBuffer = '', pinMode = 'setup1', pinTarget = '', pinPurpose = 'changepw', pinMsg = '', pinMsgT = 0, pinTemp = '';
+function onPinSuccess(){
+  ACCOUNTS[pinTarget].password = pinBuffer; saveAccounts();
+  if (pinPurpose === 'changepw'){ blurFields(); S('deliver'); state = 'admin'; adminSel = 0; }
+  else switchAccount(pinTarget);
+}
+function pinConfirm(){
+  if (pinBuffer.length < 4) return;
+  if (pinMode === 'setup1'){ pinTemp = pinBuffer; pinBuffer = ''; pinInput.value = ''; pinMode = 'setup2'; return; }
+  if (pinBuffer === pinTemp) onPinSuccess();
+  else { pinMsg = "Les mots de passe ne correspondent pas"; pinMsgT = 90; pinBuffer = ''; pinInput.value = ''; pinMode = 'setup1'; }
+}
+function openChangePassword(){
+  blurFields(); pinBuffer = ''; pinInput.value = ''; pinMode = 'setup1'; pinTarget = CURRENT; pinPurpose = 'changepw'; pinMsgT = 0;
+  state = 'adminpin'; pinInput.focus();
+}
+function adminItems(){ return accountNames().filter(nm => nm !== '__new__' && !ACCOUNTS[nm].admin); }
+function adminRows(){ return [...adminItems(), '__changepw__', '__back__']; }
+function resetAccountProgress(nm){
+  if (!ACCOUNTS[nm] || ACCOUNTS[nm].admin) return;
+  ACCOUNTS[nm].prog = { done1:false, done2:false }; saveAccounts();
+  if (nm === CURRENT) syncProgFromAccount();
+  accMsg = "Progression de " + nm + " réinitialisée"; accMsgT = 100; S('select');
+}
+function deleteAccount(nm){
+  if (!ACCOUNTS[nm] || ACCOUNTS[nm].admin) return;
+  delete ACCOUNTS[nm]; saveAccounts();
+  if (nm === CURRENT){ CURRENT = null; try { localStorage.removeItem('sidiCurrentAccount'); } catch(e){} }
+  adminSel = Math.max(0, adminSel - 1);
+  accMsg = nm + " supprimé"; accMsgT = 100; S('lost');
+}
+ 
 const CHARS = ['Ahmed','Nour','Yassine'];
-let HERO = 'Ahmed';
-try { const h = localStorage.getItem('sidiHero'); if (CHARS.includes(h)) HERO = h; } catch(e){}
+let HERO = (CURRENT && ACCOUNTS[CURRENT] && ACCOUNTS[CURRENT].hero) || 'Ahmed';
 function comps(){ return CHARS.filter(n => n !== HERO); }
-function saveHero(){ try { localStorage.setItem('sidiHero', HERO); } catch(e){} }
+function saveHero(){ if (CURRENT && ACCOUNTS[CURRENT]){ ACCOUNTS[CURRENT].hero = HERO; saveAccounts(); } }
 const heroCol = n => n === "Nour" ? "#ffb3d1" : n === "Yassine" ? "#9fd6f7" : n === "Tata" ? "#e9c9ff" : "#ffd166";
-const MENU = ["Jouer", "Niveaux", "Changer de joueur", "Crédits"], MENU_Y = [104, 126, 148, 170];
+const MENU = ["Jouer", "Niveaux", "Se déconnecter", "Options", "Changer de joueur", "Crédits"], MENU_Y = [96, 114, 132, 150, 168, 186];
 const CX = [40, 180, 320];
 const TAGS = { Ahmed:"Le chef de la bande", Nour:"La reine du couscous", Yassine:"Le costaud du quartier" };
-let menuSel = 0, selIdx = 0, selLvl = 0, creditsT = 0;
+let menuSel = 0, selIdx = 0, selLvl = 0, accSel = 0, adminSel = 0, creditsT = 0, loadingT = 0;
 const CREDITS = [
   ["SIDI RUNNER",22,"#f6f6f0"],["Le couscous de Maman",11,"#f2b632"],["",8],
   ["UN JEU DE",9,"#8ec5e8"],["Youssef Kalai",22,"#ffd166"],["",8],
@@ -477,11 +580,18 @@ const CREDITS = [
   ["INSPIRATION",9,"#8ec5e8"],["Sidi Bou Saïd, Tunisie",11,"#fff"],["100% Mloukhiya",11,"#fff"],["",8],
   ["MERCI POUR LE COUSCOUS",9,"#8ec5e8"],["",8],["Un jeu de Youssef Kalai",10,"#ffd166"]
 ];
+function logOut(){
+  CURRENT = null; try { localStorage.removeItem('sidiCurrentAccount'); } catch(e){}
+  nameInput.value = ''; pinInput.value = ''; loginMsgT = 0;
+  state = 'login'; nameInput.focus();
+}
 function menuActivate(){
   S('select');
-  if (menuSel === 0) startGame();
+  if (menuSel === 0){ state = 'loading'; loadingT = 0; }
   else if (menuSel === 1){ state = 'levels'; selLvl = 0; }
-  else if (menuSel === 2){ state = 'select'; selIdx = CHARS.indexOf(HERO); }
+  else if (menuSel === 2) logOut();
+  else if (menuSel === 3){ optionsBack = 'title'; optSel = 0; state = 'options'; }
+  else if (menuSel === 4){ state = 'select'; selIdx = CHARS.indexOf(HERO); }
   else { state = 'credits'; creditsT = 0; }
 }
 function bigSprite(x, y, name, scale, frame, dir){
@@ -501,8 +611,28 @@ function drawBack(){
   ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.fillRect(8, 240, 64, 18);
   txt("< Retour", 40, 253, 9, "#fff", "center");
 }
+function drawLoading(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.8)"; ctx.fillRect(0, 0, W, H);
+  txt("SIDI RUNNER", W/2, 86, 22, "#f6f6f0", "center");
+  const dots = ".".repeat(1 + Math.floor(tick/15) % 3);
+  txt("Chargement" + dots, W/2, 122, 13, "#f2b632", "center");
+  const p = Math.min(1, loadingT / 70);
+  rect(W/2 - 100, 138, 200, 14, "rgba(255,255,255,.15)");
+  rect(W/2 - 100, 138, Math.round(200 * p), 14, "#f2b632");
+  ctx.strokeStyle = "#f6f6f0"; ctx.lineWidth = 1; ctx.strokeRect(W/2 - 100.5, 138.5, 200, 14);
+  if (loadingT > 55){
+    txt("💾 Sauvegarde 1", W/2, 182, 13, "#8ec5e8", "center");
+    const lvl = PROG.done2 ? 3 : PROG.done1 ? 2 : 1;
+    txt(CURRENT + "  ·  Niveau " + lvl + "/3", W/2, 200, 9, "#fff", "center");
+  }
+}
 function drawMenu(){
   menuBackdrop();
+  if (isAdmin()){
+    ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.fillRect(8, 8, 84, 16);
+    txt("⚙ Page Admin", 50, 19, 8, "#ffd166", "center");
+  }
   const ay = 214 - 24, cs = comps();
   [[cs[1], 336], [cs[0], 366], [HERO, 398]].forEach(([n, x], i) => {
     sprite(x, ay, PALS[n], -1, FR(n, 0));
@@ -510,16 +640,17 @@ function drawMenu(){
   });
   bowl(404, ay - 3, MAXP);
   sprite(60, ay, PALS.Tata, 1, MOMF[Math.floor(tick/14) % 2]); txt("Tata", 66, ay - 4, 8, "#e9c9ff", "center");
-  ctx.fillStyle = "rgba(15,42,68,.78)"; ctx.fillRect(110, 26, 260, 176);
-  txt("SIDI RUNNER", W/2, 60, 28, "#f6f6f0", "center");
-  txt("Le couscous de Maman", W/2, 77, 11, "#f2b632", "center");
+  ctx.fillStyle = "rgba(15,42,68,.82)"; ctx.fillRect(94, 22, 292, 184);
+  txt("SIDI RUNNER", W/2, 54, 26, "#f6f6f0", "center");
+  txt("Le couscous de Maman", W/2, 70, 10, "#f2b632", "center");
   MENU.forEach((label, i) => {
     const sel = i === menuSel, cy = MENU_Y[i];
-    rect(W/2 - 100, cy - 13, 200, 20, sel ? "#f2b632" : "rgba(255,255,255,.14)");
-    ctx.font = 'bold 12px "Courier New",monospace'; ctx.textAlign = "center";
-    ctx.fillStyle = sel ? "#0f2a44" : "#ffffff"; ctx.fillText((sel ? "> " : "") + label + (sel ? " <" : ""), W/2, cy + 2);
+    rect(W/2 - 110, cy - 10, 220, 16, sel ? "#f2b632" : "rgba(255,255,255,.14)");
+    ctx.font = 'bold 10px "Courier New",monospace'; ctx.textAlign = "center";
+    ctx.fillStyle = sel ? "#0f2a44" : "#ffffff"; ctx.fillText((sel ? "> " : "") + label + (sel ? " <" : ""), W/2, cy + 3);
   });
-  txt("Joueur : " + HERO, W/2, 192, 8, heroCol(HERO), "center");
+  txt("Compte : " + CURRENT + (isAdmin() ? " (Admin)" : ""), W/2, 199, 8, isAdmin() ? "#ffd166" : "#8ec5e8", "center");
+  txt("Joueur : " + HERO, W/2, 210, 8, heroCol(HERO), "center");
   txt("Un jeu de Youssef Kalai", W/2, 262, 8, "#fff", "center");
 }
 function drawSelect(){
@@ -587,14 +718,19 @@ function drawCredits(){
   txt("Un jeu de Youssef Kalai", W/2, 14, 9, "#ffd166", "center");
   txt("Entrée ou toucher : retour", W/2, H - 4, 8, "#8ec5e8", "center");
 }
-
-
+ 
+ 
 /* ---------- Niveau 2 et bonus : traverser Sidi Bou Saïd (la rue, le marché) ---------- */
 const FLOOR = 226, SW = 2900, PAPA_X = 44, POST_X = 2590;
 let MODE = 'roof', SL = null, DLG = null, COOK = null, hasMail = false, alertOn = false, banner = null;
 let winKind = 'roof', PROG = { done1:false, done2:false };
-try { const pr = JSON.parse(localStorage.getItem('sidiProg') || '{}'); PROG.done1 = !!pr.done1; PROG.done2 = !!pr.done2; } catch(e){}
-function saveProg(){ try { localStorage.setItem('sidiProg', JSON.stringify(PROG)); } catch(e){} }
+syncProgFromAccount();
+function saveProg(){
+  if (!CURRENT || !ACCOUNTS[CURRENT]) return;
+  const a = ACCOUNTS[CURRENT];
+  a.prog.done1 = a.admin ? true : PROG.done1; a.prog.done2 = a.admin ? true : PROG.done2;
+  syncProgFromAccount(); saveAccounts();
+}
 const bonusUnlocked = () => PROG.done1 && PROG.done2;
 const me = () => MODE === 'market' ? 'Tata' : HERO;
 const child = n => n === 'Nour' ? 'ma fille' : 'mon fils';
@@ -613,15 +749,15 @@ function buildStreet(kind){
   CRATES.forEach(x => rects.push({ x, y:FLOOR - 18, w:26, h:18 }));
   STALLS.forEach(st => { if (st.awn) rects.push({ x:st.x - 8, y:170, w:st.w + 16, h:6 }); });
   const crowd = [];
-  for (let i = 0; i < 22; i++){
+  for (let i = 0; i < 12; i++){
     const female = hh(i + 7) > 0.5, range = 20 + Math.floor(hh(i + 40)*40);
     const fez = PICK(i, ["#c8102e","#1f5fa6","#2f855a","#f59e0b","#6d28d9"]);
-    crowd.push({ cx:600 + i*86 + Math.floor(hh(i)*30), range, w:(0.35 + hh(i + 80)*0.4) / range, ph:hh(i + 120)*6.28, female,
+    crowd.push({ cx:600 + i*155 + Math.floor(hh(i)*30), range, w:(0.35 + hh(i + 80)*0.4) / range, ph:hh(i + 120)*6.28, female,
       pal: female
         ? { S:"#e0a878", M:"#2b1a12", H:PICK(i+3, ["#f6f6f0","#e0559a","#f2b632","#2f855a"]), D:PICK(i+9, ["#1f5fa6","#7c3aed","#c0392b","#0f766e","#b45309"]), G:"#f2b632", B:"#1a202c" }
         : { ...BASE_PAL, T:null, F:fez, f:fez, W:PICK(i+5, ["#f3ead2","#e9d5ff","#bbf7d0","#fde68a","#fecaca","#bfdbfe"]), w:"#d8ccae" } });
   }
-  const police = [[520,140,false],[1100,130,false],[1900,140,false],[2280,100,false],[800,120,true],[1500,140,true],[2150,120,true]]
+  const police = [[600,120,false],[1400,110,false],[2200,120,false],[1000,100,true],[1900,110,true]]
     .map(([home, range, extra]) => ({ home, range, extra, x:home, dir:1, mode:'patrol', t:0, cool:0 }));
   const items = kind === 'market' ? ING.map(g => { const st = STALLS[g.stall];
     return { k:g.k, x:st.x + st.w/2 - 4, y:g.up ? 170 - 14 : FLOOR - 16, got:false }; }) : [];
@@ -629,7 +765,7 @@ function buildStreet(kind){
 }
 function personPos(c){ const a = tick*c.w + c.ph; return { x:c.cx + Math.sin(a)*c.range, dir:Math.cos(a) >= 0 ? 1 : -1 }; }
 const gotCount = () => SL.items.filter(i => i.got).length;
-
+ 
 function startStreet(kind, intro, resetScore){
   MODE = kind; if (resetScore){ score = 0; collected = 0; }
   SL = buildStreet(kind); portions = MAXP; hasMail = false; alertOn = false; banner = null; COOK = null; friends = [];
@@ -643,13 +779,13 @@ function introLines(kind){
   if (kind === 'mail') return [
     { who:"Papa", t:HERO + " ! Viens ici, j'ai une mission pour toi." },
     { who:"Papa", t:"Le facteur garde mon courrier à la poste, au bout du village." },
-    { who:"Papa", t:"Traverse le marché, évite la foule et surtout les policiers !" },
+    { who:"Papa", t:"Traverse le marché, prends le bon chemin et évite les policiers !" },
     { who:"Papa", t:"Ils n'aiment pas qu'on court dans les ruelles. Sois malin !" },
     { who:HERO,   t:"Compte sur moi, Papa !" } ];
   return [
     { who:"Tata", t:"Oh là là ! Toute la famille arrive et je n'ai rien préparé !" },
     { who:"Tata", t:"Semoule, viande, carottes, pois chiches, courgettes, harissa" },
-    { who:"Tata", t:"Vite au marché ! Attention à la foule et aux policiers !" } ];
+    { who:"Tata", t:"Vite au marché ! Prends le bon chemin et évite les policiers !" } ];
 }
 const POST_LINES = () => [
   { who:"Facteur", t:"Ah ! Tu viens chercher le courrier de ton père ?" },
@@ -660,7 +796,7 @@ const PAPA_END = () => [
   { who:"Papa", t:"Merci " + child(HERO) + " ! Voyons ce courrier..." },
   { who:"Papa", t:"Encore une facture d'électricité... Je la paierai demain !" },
   { who:"Papa", t:"Tu es un vrai champion, " + HERO + " !" } ];
-
+ 
 /* dialogues */
 function openDialog(lines, done){ DLG = { lines, i:0, typed:0, acc:0, done }; state = 'dialog'; }
 function dlgUpdate(){
@@ -689,7 +825,7 @@ function drawDlgBox(){
   txt(line.t.slice(0, DLG.typed), 26, y0 + 30, 11, "#fff");
   if (DLG.typed >= line.t.length && Math.floor(tick/20) % 2) txt("▼", 456, y0 + 44, 9, "#f2b632", "right");
 }
-
+ 
 /* police, foule, objectifs */
 function updatePolice(){
   for (const c of SL.police){
@@ -699,11 +835,11 @@ function updatePolice(){
     if (c.mode === 'patrol'){
       c.x += c.dir * 0.7;
       if (c.x > c.home + c.range) c.dir = -1; if (c.x < c.home - c.range) c.dir = 1;
-      if (Math.abs(dx) < 90 && dx * c.dir > 0 && low && c.cool <= 0){ c.mode = 'chase'; c.t = 0; S('whistle'); }
+      if (Math.abs(dx) < 65 && dx * c.dir > 0 && low && c.cool <= 0){ c.mode = 'chase'; c.t = 0; S('whistle'); }
     } else {
       c.t++; c.dir = dx >= 0 ? 1 : -1;
-      if (low) c.x += c.dir * 1.7;
-      if (c.t > 220 || Math.abs(dx) > 240){ c.mode = 'patrol'; c.dir = c.x > c.home ? -1 : 1; c.cool = 120; }
+      if (low) c.x += c.dir * 1.5;
+      if (c.t > 150 || Math.abs(dx) > 190){ c.mode = 'patrol'; c.dir = c.x > c.home ? -1 : 1; c.cool = 90; }
     }
     if (overlap(player, { x:c.x + 2, y:FLOOR - 24, w:10, h:24 })){
       hurt(c.x + 6); c.mode = 'patrol'; c.dir = dx >= 0 ? -1 : 1; c.cool = 120;
@@ -714,7 +850,7 @@ function updateStreet(){
   const P = player;
   if (P.inv > 0) P.inv--;
   if (banner && banner.t > 0) banner.t--;
-  P.vx = ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)) * SPEED;
+  P.vx = ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)) * SPD();
   if (P.kb > 0){ P.vx = P.kdir * 2; P.kb--; }
   if (P.vx && !P.kb) P.dir = Math.sign(P.vx);
   if (keys.jump && P.onGround){ P.vy = -JUMP; P.onGround = false; S('jump'); }
@@ -727,15 +863,11 @@ function updateStreet(){
     P.vy = 0;
   }
   P.moving = P.onGround && P.vx !== 0;
-
-  for (const c of SL.crowd){
-    const pp = personPos(c);
-    if (Math.abs(pp.x - P.x) < 50 && overlap(P, { x:pp.x + 2, y:FLOOR - 22, w:10, h:22 })) hurt(pp.x + 6);
-  }
+ 
   if (state !== 'play') return;
   updatePolice();
   if (state !== 'play') return;
-
+ 
   if (SL.kind === 'mail'){
     if (!hasMail && Math.abs(P.x - POST_X) < 30){
       openDialog(POST_LINES(), () => { hasMail = true; alertOn = true; S('stage'); banner = { t:170, text:"Rapporte le courrier à Papa !" }; });
@@ -767,7 +899,7 @@ function cookUpdate(){
       () => { state = 'win'; winKind = 'bonus'; score += portions*100 + 200; S('deliver'); });
   }
 }
-
+ 
 /* dessin de la rue */
 function ingIcon(k, x, y){
   x = Math.round(x); y = Math.round(y);
@@ -864,7 +996,7 @@ function drawStreetGame(){
     txt(nm, player.x + 6, player.y - (hasMail ? 15 : 4), 8, heroCol(nm), "center");
   } else if (state === 'cook') { sprite(player.x, player.y, PALS[nm], -1, FR(nm, 0)); txt(nm, player.x + 6, player.y - 4, 8, heroCol(nm), "center"); }
   ctx.restore();
-
+ 
   // la marmite (scène de cuisine)
   if (COOK){
     const px = Math.round(72 - cam);
@@ -877,7 +1009,7 @@ function drawStreetGame(){
       if (q >= 0 && q < 2.4) txt(ING[i].k + " !", W/2, 90, 12, "#f2b632", "center");
     }
   }
-
+ 
   // flèche vers l'objectif
   let tx = null, tl = "";
   if (state === 'play'){
@@ -889,7 +1021,7 @@ function drawStreetGame(){
     if (sx > W - 8) txt(tl + " >>", W - 6, 120, 10, "#f2b632", "right");
     else if (sx < 8) txt("<< " + tl, 6, 120, 10, "#f2b632", "left");
   }
-
+ 
   // interface
   ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(4, 4, 196, 56);
   txt(SL.kind === 'mail' ? "Niveau 2 : Le courrier" : "Bonus : Chez Tata", 10, 16, 9, "#fff");
@@ -930,12 +1062,169 @@ function winAction(){
   else if (winKind === 'mail' && bonusUnlocked()) startStreet('market', true, false);
   else state = 'title';
 }
-
+ 
+ 
+/* ---------- Réglages (son, sensibilité) ---------- */
+let SETTINGS = { music:10, sfx:10, sens:1 };
+try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('sidiSettings') || '{}')); } catch(e){}
+const SENS_LEVELS = [0.8, 1, 1.25], SENS_LABELS = ["Douce", "Normale", "Vive"];
+function saveSettings(){ try { localStorage.setItem('sidiSettings', JSON.stringify(SETTINGS)); } catch(e){} }
+function applySettings(){ if (sfxG) sfxG.gain.value = 0.7 * (SETTINGS.sfx / 10); }
+function resetSettings(){ SETTINGS = { music:10, sfx:10, sens:1 }; applySettings(); saveSettings(); S('deliver'); }
+function SPD(){ return SPEED * SENS_LEVELS[SETTINGS.sens]; }
+ 
+/* ---------- Pause ---------- */
+const PAUSE_MENU = ["Reprendre", "Options", "Quitter la partie"];
+let pausePrev = 'play', pauseSel = 0;
+function pauseGame(){ if (state === 'play' || state === 'cook'){ pausePrev = state; state = 'pause'; pauseSel = 0; S('select'); } }
+function resumeGame(){ state = pausePrev || 'play'; S('select'); }
+ 
+/* ---------- Options ---------- */
+const OPT_ROWS = ["Musique", "Sons", "Sensibilité", "Normal", "Retour"];
+let optSel = 0, optionsBack = 'title';
+function optLabel(row){
+  if (row === "Musique") return SETTINGS.music * 10 + "%";
+  if (row === "Sons") return SETTINGS.sfx * 10 + "%";
+  if (row === "Sensibilité") return SENS_LABELS[SETTINGS.sens];
+  return "";
+}
+function optNav(dir){ optSel = (optSel + OPT_ROWS.length + dir) % OPT_ROWS.length; S('select'); }
+function optChange(dir){
+  if (optSel === 0) SETTINGS.music = Math.min(10, Math.max(0, SETTINGS.music + dir));
+  else if (optSel === 1) SETTINGS.sfx = Math.min(10, Math.max(0, SETTINGS.sfx + dir));
+  else if (optSel === 2) SETTINGS.sens = Math.min(2, Math.max(0, SETTINGS.sens + dir));
+  else return;
+  applySettings(); saveSettings(); S('select');
+}
+function optActivate(){
+  const row = OPT_ROWS[optSel];
+  if (row === "Normal") resetSettings();
+  else if (row === "Retour"){ state = optionsBack; if (state === 'pause') pauseSel = 0; }
+}
+ 
+ 
+function drawUnderlying(){ if (MODE !== 'roof'){ drawStreetGame(); } else drawGame(); }
+function drawFieldBox(x, y, w, h, input){
+  const focused = document.activeElement === input;
+  ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = focused ? "#f2b632" : "#f6f6f0"; ctx.lineWidth = focused ? 2 : 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+}
+function drawLogin(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.72)"; ctx.fillRect(0, 0, W, H);
+  txt("SIDI RUNNER", W/2, 44, 20, "#f6f6f0", "center");
+  txt("Connexion", W/2, 61, 12, "#f2b632", "center");
+  txt("Nom d'utilisateur", W/2, 80, 8, "#8ec5e8", "center");
+  drawFieldBox(W/2 - 100, 84, 200, 22, nameInput);
+  txt(nameInput.value, W/2, 99, 11, "#fff", "center");
+  txt("Mot de passe", W/2, 118, 8, "#8ec5e8", "center");
+  drawFieldBox(W/2 - 100, 122, 200, 22, pinInput);
+  txt("•".repeat(pinInput.value.length), W/2, 137, 11, "#fff", "center");
+  if (loginMsgT > 0) txt(loginMsg, W/2, 156, 9, "#ff8fa3", "center");
+  const btnHover = mouseX > W/2 - 70 && mouseX < W/2 + 70 && mouseY > 164 && mouseY < 184;
+  rect(W/2 - 70, 164, 140, 20, btnHover ? "#ffd166" : "#f2b632");
+  ctx.fillStyle = "#0f2a44"; ctx.font = 'bold 10px "Courier New",monospace'; ctx.textAlign = "center"; ctx.fillText("Se connecter", W/2, 178);
+  const linkHover = mouseY > 194 && mouseY < 206;
+  if (linkHover) rect(W/2 - 90, 193, 180, 13, "rgba(255,255,255,.14)");
+  txt("Pas de compte ? Crée-en un", W/2, 200, 9, linkHover ? "#fff" : "#8ec5e8", "center");
+  txt("Tab : changer de champ   Entrée : valider", W/2, 220, 8, "#7a93ab", "center");
+  placeField(nameInput, W/2 - 100, 84, 200, 22); placeField(pinInput, W/2 - 100, 122, 200, 22);
+}
+function drawNewAccount(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.72)"; ctx.fillRect(0, 0, W, H);
+  txt("Nouveau compte", W/2, 44, 18, "#f2b632", "center");
+  txt("Nom d'utilisateur", W/2, 66, 8, "#8ec5e8", "center");
+  drawFieldBox(W/2 - 100, 70, 200, 22, nameInput);
+  txt(nameInput.value, W/2, 85, 11, "#fff", "center");
+  txt("Mot de passe (4 caractères min.)", W/2, 104, 8, "#8ec5e8", "center");
+  drawFieldBox(W/2 - 100, 108, 200, 22, pinInput);
+  txt("•".repeat(pinInput.value.length), W/2, 123, 11, "#fff", "center");
+  if (accMsgT > 0) txt(accMsg, W/2, 142, 9, "#ff8fa3", "center");
+  const btnHover = mouseX > W/2 - 70 && mouseX < W/2 + 70 && mouseY > 150 && mouseY < 170;
+  rect(W/2 - 70, 150, 140, 20, btnHover ? "#ffd166" : "#f2b632");
+  ctx.fillStyle = "#0f2a44"; ctx.font = 'bold 10px "Courier New",monospace'; ctx.textAlign = "center"; ctx.fillText("Créer le compte", W/2, 164);
+  const backHover = mouseY > 180 && mouseY < 192;
+  if (backHover) rect(W/2 - 90, 179, 180, 13, "rgba(255,255,255,.14)");
+  txt("< Retour à la connexion", W/2, 186, 9, backHover ? "#fff" : "#8ec5e8", "center");
+  txt("Tab : changer de champ   Entrée : valider", W/2, 204, 8, "#7a93ab", "center");
+  placeField(nameInput, W/2 - 100, 70, 200, 22); placeField(pinInput, W/2 - 100, 108, 200, 22);
+}
+function drawAdminPin(){
+  if (pinPurpose === 'changepw') drawUnderlyingAdmin(); else menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.78)"; ctx.fillRect(0, 0, W, H);
+  const title = pinMode === 'setup1' ? "Crée un mot de passe (4 caractères min.)" : "Confirme le mot de passe";
+  txt(title, W/2, 70, 13, "#f2b632", "center");
+  txt(pinTarget, W/2, 88, 9, "#ffd166", "center");
+  drawFieldBox(140, 100, 200, 26, pinInput);
+  const cursor = Math.floor(tick/20) % 2 ? "|" : "";
+  txt("•".repeat(pinBuffer.length) + cursor, W/2, 118, 13, "#fff", "center");
+  if (pinMsgT > 0) txt(pinMsg, W/2, 140, 9, "#ff8fa3", "center");
+  txt("Lettres et chiffres   Entrée : valider   Échap : annuler", W/2, 162, 8, "#8ec5e8", "center");
+  placeField(pinInput, 140, 100, 200, 26); hideField(nameInput);
+}
+function drawAdmin(){
+  menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.62)"; ctx.fillRect(0, 0, W, H);
+  txt("Page Admin", W/2, 24, 17, "#f2b632", "center");
+  txt(CURRENT, W/2, 39, 9, "#ffd166", "center");
+  const rows = adminRows(), top = 50, maxH = 224 - top, rowH = Math.min(26, Math.floor(maxH / rows.length));
+  rows.forEach((nm, i) => {
+    const sel = i === adminSel, y = top + i*rowH, act = nm === '__changepw__' || nm === '__back__';
+    ctx.fillStyle = sel ? "rgba(30,70,110,.95)" : "rgba(15,42,68,.85)"; ctx.fillRect(50, y, 380, rowH - 4);
+    ctx.strokeStyle = sel ? "#f2b632" : "#f6f6f0"; ctx.lineWidth = sel ? 2 : 1; ctx.strokeRect(50.5, y + .5, 379, rowH - 5);
+    if (nm === '__changepw__'){ txt("Changer mon mot de passe", W/2, y + rowH/2 + 3, 9, "#fff", "center"); return; }
+    if (nm === '__back__'){ txt("< Retour", W/2, y + rowH/2 + 3, 9, "#fff", "center"); return; }
+    const a = ACCOUNTS[nm];
+    ctx.font = 'bold 10px "Courier New",monospace'; ctx.textAlign = "left"; ctx.fillStyle = "#fff";
+    ctx.fillText(nm, 58, y + rowH/2 + 3);
+    ctx.font = '8px "Courier New",monospace'; ctx.fillStyle = "#8ec5e8";
+    ctx.fillText((a.prog.done1 ? "✓" : "✗") + " N1   " + (a.prog.done2 ? "✓" : "✗") + " N2", 150, y + rowH/2 + 3);
+    rect(322, y + 3, 30, rowH - 10, "rgba(255,255,255,.15)"); txt("↺", 337, y + rowH/2 + 3, 10, "#8ec5e8", "center");
+    rect(356, y + 3, 30, rowH - 10, "rgba(255,255,255,.15)"); txt("✕", 371, y + rowH/2 + 3, 10, "#ff8fa3", "center");
+  });
+  if (accMsgT > 0) txt(accMsg, W/2, 240, 8, "#ffd166", "center");
+  txt("↑↓ : choisir   R : réinitialiser   Suppr : supprimer   Échap : retour", W/2, 254, 8, "#8ec5e8", "center");
+}
+function drawUnderlyingAdmin(){ drawAdmin(); }
+function drawOptionsScreen(){
+  if (optionsBack === 'pause') drawUnderlying(); else menuBackdrop();
+  ctx.fillStyle = "rgba(10,25,45,.72)"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(15,42,68,.92)"; ctx.fillRect(90, 40, 300, 190);
+  txt("OPTIONS", W/2, 66, 18, "#f6f6f0", "center");
+  OPT_ROWS.forEach((row, i) => {
+    const sel = i === optSel, cy = 90 + i*26, adj = i < 3;
+    rect(110, cy - 12, 260, 22, sel ? "#f2b632" : "rgba(255,255,255,.12)");
+    ctx.font = 'bold 11px "Courier New",monospace';
+    ctx.fillStyle = sel ? "#0f2a44" : "#fff";
+    if (adj){
+      ctx.textAlign = "left"; ctx.fillText(row, 118, cy + 3);
+      ctx.textAlign = "right"; ctx.fillText((sel ? "< " : "") + optLabel(row) + (sel ? " >" : ""), 360, cy + 3);
+    } else { ctx.textAlign = "center"; ctx.fillText((sel ? "> " : "") + row + (sel ? " <" : ""), 240, cy + 3); }
+  });
+  txt("↑↓ : ligne   ←→ : valeur   Entrée : action", W/2, 240, 8, "#8ec5e8", "center");
+  txt("Échap : retour", W/2, 252, 8, "#8ec5e8", "center");
+}
+function drawPauseScreen(){
+  drawUnderlying();
+  ctx.fillStyle = "rgba(10,25,45,.72)"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(15,42,68,.92)"; ctx.fillRect(140, 60, 200, 150);
+  txt("PAUSE", W/2, 88, 20, "#f6f6f0", "center");
+  PAUSE_MENU.forEach((label, i) => {
+    const sel = i === pauseSel, cy = 116 + i*34;
+    rect(W/2 - 90, cy - 13, 180, 24, sel ? "#f2b632" : "rgba(255,255,255,.14)");
+    ctx.font = 'bold 11px "Courier New",monospace'; ctx.textAlign = "center";
+    ctx.fillStyle = sel ? "#0f2a44" : "#fff"; ctx.fillText((sel ? "> " : "") + label + (sel ? " <" : ""), W/2, cy + 3);
+  });
+  txt("Entrée : valider   Échap : reprendre", W/2, 200, 8, "#8ec5e8", "center");
+}
+ 
 /* ---------- État ---------- */
 let li = 0, level, player, friends, coins, camera = 0, history, score = 0, collected = 0, portions = MAXP;
 let state = 'title', tick = 0, stageT = 0, deliverT = 0, safe, CS = null, fadeIn = 0;
 const keys = { left:false, right:false, jump:false };
-
+ 
 function loadLevel(i){
   li = i; const L = LEVELS[i];
   let x = 0; const houses = L.houses.map(([w,y,gap]) => { const h = { x, y, w, gap }; x += w + gap; return h; });
@@ -977,14 +1266,17 @@ function hurt(fromX){
   portions--; player.inv = 90; player.vy = -4; player.kb = 8; player.kdir = player.x < fromX ? -1 : 1;
   if (portions <= 0) setLost(); else S('hurt');
 }
-
+ 
 /* ---------- Mise à jour ---------- */
 function update(){
   tick++;
   if (fadeIn > 0) fadeIn--;
   if (state === 'credits') creditsT++;
-  if (AC && tick % 30 === 0) musicG.gain.setTargetAtTime(['title','select','levels','credits','cutscene','dialog'].includes(state) ? 0.18 : 0.3, AC.currentTime, 0.3);
+  if (accMsgT > 0) accMsgT--;
+  if (pinMsgT > 0) pinMsgT--;
+  if (AC && tick % 30 === 0) musicG.gain.setTargetAtTime((['title','select','levels','credits','cutscene','dialog','login','newaccount','adminpin','options','pause'].includes(state) ? 0.18 : 0.3) * (SETTINGS.music / 10), AC.currentTime, 0.3);
   if (state === 'cutscene'){ cutUpdate(); return; }
+  if (state === 'loading'){ if (++loadingT > 95) startGame(); return; }
   if (state === 'lost'){ lostUpdate(); return; }
   if (state === 'dialog'){ dlgUpdate(); return; }
   if (state === 'cook'){ cookUpdate(); return; }
@@ -992,14 +1284,14 @@ function update(){
   if (state === 'stage'){ if (--stageT <= 0){ loadLevel(li + 1); state = 'play'; } return; }
   if (state === 'deliver'){ if (++deliverT > 230){ state = 'win'; winKind = 'roof'; PROG.done1 = true; saveProg(); } return; }
   if (state !== 'play') return;
-
+ 
   if (player.inv > 0) player.inv--;
-  player.vx = ((keys.right?1:0) - (keys.left?1:0)) * SPEED;
+  player.vx = ((keys.right?1:0) - (keys.left?1:0)) * SPD();
   if (player.kb > 0){ player.vx = player.kdir * 2; player.kb--; }
   if (player.vx && !player.kb) player.dir = Math.sign(player.vx);
   if (keys.jump && player.onGround){ player.vy = -JUMP; player.onGround = false; S('jump'); }
   player.vy = Math.min(player.vy + G, 9);
-
+ 
   player.x += player.vx;
   if (player.x < 0) player.x = 0;
   for (const r of level.rects) if (overlap(player, r)){ if (player.vx > 0) player.x = r.x - player.w; else if (player.vx < 0) player.x = r.x + r.w; }
@@ -1012,7 +1304,7 @@ function update(){
     }
   });
   player.moving = player.onGround && player.vx !== 0;
-
+ 
   if (player.onGround && player.house !== null){
     const h = level.houses[player.house];
     if (player.x > h.x + 6 && player.x + player.w < h.x + h.w - 6) safe = { x:player.x, y:player.y, house:player.house };
@@ -1025,25 +1317,25 @@ function update(){
   for (const c of level.cacti) if (overlap(player, { x:c.x+1, y:c.y-8, w:8, h:8 })) hurt(c.x + 5);
   for (const g of level.gulls){ const p = gullPos(g); if (overlap(player, { x:p.x-6, y:p.y-2, w:12, h:8 })) hurt(p.x); }
   if (state !== 'play') return;
-
+ 
   for (const c of coins)
     if (!c.got && overlap(player, { x:c.x-6, y:c.y-6, w:12, h:12 })){ c.got = true; score += 10; collected++; S('coin'); }
-
+ 
   history.push({ x:player.x, y:player.y, dir:player.dir, moving:player.moving });
   if (history.length > 120) history.shift();
   for (const f of friends){
     const h = history[Math.max(0, history.length - 1 - f.delay)];
     f.x = h.x; f.y = h.y; f.dir = h.dir; f.moving = h.moving;
   }
-
+ 
   if (level.mom){
     if (player.x + player.w >= level.mom.x - 6){ state = 'deliver'; deliverT = 0; score += portions * 100; S('deliver'); }
   } else if (player.x > level.flagX){ score += 50; state = 'stage'; stageT = 130; S('stage'); }
-
+ 
   camera += (player.x - W/3 - camera) * 0.12;
   camera = Math.max(0, Math.min(level.width - W, camera));
 }
-
+ 
 /* ---------- Dessin ---------- */
 function drawGame(){
   const cam = Math.round(camera);
@@ -1061,7 +1353,7 @@ function drawGame(){
     ctx.save(); ctx.translate(-cam, 0); sprite(110, level.houses[0].y - 24, PALS.Tata, -1, MOMF[Math.floor(tick/14) % 2]); ctx.restore();
     txt("Tata", 116 - cam, level.houses[0].y - 30, 8, "#e9c9ff", "center");
   }
-
+ 
   // Maman
   let momBowl = false;
   if (level.mom){
@@ -1072,7 +1364,7 @@ function drawGame(){
     txt("Maman", mx + 6, m.y - (momBowl ? 46 : 30), 8, "#ffd1e3", "center");
     if (momBowl) bowl(mx + 6, m.y - 27, portions);
   }
-
+ 
   const fr = m => m ? Math.floor(tick/6) % 2 : 0;
   for (let i = friends.length - 1; i >= 0; i--){
     const f = friends[i], px = f.x - cam;
@@ -1087,7 +1379,7 @@ function drawGame(){
     txt(HERO, px + 6, player.y - (momBowl ? 4 : 24), 8, heroCol(HERO), "center");
   }
   for (const g of level.gulls) drawGull(g, cam);
-
+ 
   // Interface
   ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(4, 4, 190, 50);
   txt(`Étape ${li+1}/${LEVELS.length} : ${level.name}`, 10, 16, 9, "#fff");
@@ -1098,7 +1390,7 @@ function drawGame(){
     rect(bx+1, 31, 12, 3, i < portions ? "#f3d58a" : "#3a4b5e");
   }
   txt("Porte-le à Maman !", 10, 51, 8, "#8ec5e8");
-
+ 
   if (state === 'title'){
     ctx.fillStyle = "rgba(15,42,68,.75)"; ctx.fillRect(0, 60, W, 150);
     txt("SIDI RUNNER", W/2, 105, 34, "#f6f6f0", "center");
@@ -1131,15 +1423,27 @@ function draw(){
   if (state === 'cutscene') drawCutscene();
   else if (state === 'lost') drawLost();
   else if (state === 'title') drawMenu();
+  else if (state === 'loading') drawLoading();
   else if (state === 'select') drawSelect();
   else if (state === 'levels') drawLevels();
   else if (state === 'credits') drawCredits();
+  else if (state === 'login') drawLogin();
+  else if (state === 'newaccount') drawNewAccount();
+  else if (state === 'adminpin') drawAdminPin();
+  else if (state === 'admin') drawAdmin();
+  else if (state === 'options') drawOptionsScreen();
+  else if (state === 'pause') drawPauseScreen();
   else if (MODE !== 'roof'){ drawStreetGame(); if (state === 'dialog') drawDlgBox(); }
   else drawGame();
+  if (state === 'play' || state === 'cook') drawPauseButton();
   drawFadeAndMute();
 }
+function drawPauseButton(){
+  ctx.fillStyle = "rgba(15,42,68,.8)"; ctx.fillRect(W-130, 4, 58, 14);
+  txt("II Pause", W-101, 15, 8, "#8ec5e8", "center");
+}
 function loop(){ update(); draw(); requestAnimationFrame(loop); }
-
+ 
 /* ---------- Contrôles ---------- */
 const map = { ArrowLeft:'left', a:'left', q:'left', ArrowRight:'right', d:'right', ArrowUp:'jump', w:'jump', z:'jump', ' ':'jump' };
 function confirm(){
@@ -1151,31 +1455,85 @@ function confirm(){
   else if (state === 'lost'){ if (MODE === 'roof'){ loadLevel(li); state = 'play'; } else startStreet(MODE, false, false); }
   else if (state === 'cutscene') cutAdvance();
   else if (state === 'dialog') dlgAdvance();
+  else if (state === 'login') doLogin();
+  else if (state === 'newaccount') doCreateAccount();
+  else if (state === 'adminpin') pinConfirm();
+  else if (state === 'admin'){
+    const rows = adminRows(), nm = rows[adminSel];
+    if (nm === '__changepw__') openChangePassword();
+    else if (nm === '__back__'){ S('select'); state = 'title'; }
+  }
+  else if (state === 'options') optActivate();
+  else if (state === 'pause'){
+    const item = PAUSE_MENU[pauseSel];
+    if (item === "Reprendre") resumeGame();
+    else if (item === "Options"){ optionsBack = 'pause'; optSel = 0; state = 'options'; }
+    else if (item === "Quitter la partie"){ S('select'); state = 'title'; menuSel = 0; }
+  }
 }
 function navKey(dir){       // dir = -1 (gauche/haut) ou +1 (droite/bas)
   S('select');
   if (state === 'title') menuSel = (menuSel + MENU.length + dir) % MENU.length;
+  else if (state === 'pause') pauseSel = (pauseSel + PAUSE_MENU.length + dir) % PAUSE_MENU.length;
   else if (state === 'select') selIdx = (selIdx + 3 + dir) % 3;
   else if (state === 'levels') selLvl = (selLvl + 3 + dir) % 3;
+  else if (state === 'admin') adminSel = (adminSel + adminRows().length + dir) % adminRows().length;
 }
+const nameInput = document.getElementById('nameInput'), pinInput = document.getElementById('pinInput');
+pinInput.addEventListener('input', () => { pinBuffer = pinInput.value.slice(0, 16); });
 addEventListener('keydown', e => {
+  if (document.activeElement === nameInput || document.activeElement === pinInput){
+    if (e.key === 'Enter'){
+      if (state === 'login') doLogin();
+      else if (state === 'newaccount') doCreateAccount();
+      else if (state === 'adminpin') pinConfirm();
+    } else if (e.key === 'Escape'){
+      document.activeElement.blur(); pinBuffer = '';
+      if (state === 'newaccount'){ blurFields(); state = 'login'; }
+    }
+    return;
+  }
   initAudio();
-  if (map[e.key]){ keys[map[e.key]] = true; e.preventDefault(); }
-  if (state === 'title'){
+  if (map[e.key] && state !== 'pause'){ keys[map[e.key]] = true; e.preventDefault(); }
+  if (state === 'title' || state === 'pause' || state === 'admin'){
     if (['ArrowUp','w','z'].includes(e.key)) navKey(-1);
     if (['ArrowDown','s'].includes(e.key)) navKey(1);
   } else if (state === 'select' || state === 'levels'){
     if (['ArrowLeft','a','q','ArrowUp'].includes(e.key)) navKey(-1);
     if (['ArrowRight','d','ArrowDown'].includes(e.key)) navKey(1);
+  } else if (state === 'options'){
+    if (['ArrowUp','w','z'].includes(e.key)) optNav(-1);
+    if (['ArrowDown','s'].includes(e.key)) optNav(1);
+    if (['ArrowLeft','a','q'].includes(e.key)) optChange(-1);
+    if (['ArrowRight','d'].includes(e.key)) optChange(1);
   }
-  if ((e.key === 'Enter' || (e.key === ' ' && state !== 'play')) && !e.repeat) confirm();
-  if (e.key === 'Escape'){ if (state === 'select' || state === 'credits' || state === 'levels') state = 'title'; else cutSkip(); }
+  if (state === 'title' && isAdmin() && (e.key === 'a' || e.key === 'A')){ S('select'); state = 'admin'; adminSel = 0; }
+  if (state === 'admin'){
+    const rows = adminRows(), nm = rows[adminSel];
+    if (nm && nm !== '__changepw__' && nm !== '__back__'){
+      if (e.key === 'r' || e.key === 'R') resetAccountProgress(nm);
+      if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); deleteAccount(nm); }
+    }
+  }
+  if ((e.key === 'Enter' || (e.key === ' ' && state !== 'play' && state !== 'cook')) && !e.repeat) confirm();
+  if ((e.key === 'p' || e.key === 'P') && (state === 'play' || state === 'cook')) pauseGame();
+  else if ((e.key === 'p' || e.key === 'P') && state === 'pause') resumeGame();
+  if (e.key === 'Escape'){
+    if (state === 'pause') resumeGame();
+    else if (state === 'play' || state === 'cook') pauseGame();
+    else if (state === 'options'){ state = optionsBack; if (state === 'pause') pauseSel = 0; }
+    else if (state === 'admin'){ S('select'); state = 'title'; }
+    else if (state === 'newaccount'){ blurFields(); state = 'login'; }
+    else if (state === 'select' || state === 'credits' || state === 'levels') state = 'title';
+    else cutSkip();
+  }
   if (e.key === 'm' || e.key === 'M') toggleMute();
 });
 addEventListener('keyup', e => { if (map[e.key]) keys[map[e.key]] = false; });
 function padNav(k){         // boutons tactiles ◀ ▶ ▲ dans les menus et dialogues
-  if (state === 'play') return;
-  if ((state === 'title' || state === 'select' || state === 'levels') && k !== 'jump') navKey(k === 'left' ? -1 : 1);
+  if (state === 'play' || state === 'cook') return;
+  if ((state === 'title' || state === 'select' || state === 'levels' || state === 'pause' || state === 'admin') && k !== 'jump') navKey(k === 'left' ? -1 : 1);
+  else if (state === 'options' && k !== 'jump') optChange(k === 'left' ? -1 : 1);
   else if (k === 'jump') confirm();
 }
 [['bl','left'],['br','right'],['bj','jump']].forEach(([id,k]) => {
@@ -1188,10 +1546,12 @@ cv.addEventListener('pointerdown', e => {
   initAudio();
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
   if (x > W - 66 && y < 22){ toggleMute(); return; }
-  if ((state === 'select' || state === 'levels') && x < 74 && y > 238 && y < 260){ S('select'); state = 'title'; return; }
+  if ((state === 'play' || state === 'cook') && x > W - 130 && x < W - 68 && y < 22){ pauseGame(); return; }
+  if ((state === 'select' || state === 'levels') && x < 74 && y > 232 && y < 260){ S('select'); state = 'title'; return; }
+  if (state === 'title' && isAdmin() && x > 8 && x < 92 && y > 8 && y < 24){ S('select'); state = 'admin'; adminSel = 0; return; }
   if (state === 'title'){
     for (let i = 0; i < MENU.length; i++)
-      if (x > W/2 - 100 && x < W/2 + 100 && y > MENU_Y[i] - 13 && y < MENU_Y[i] + 7){ menuSel = i; menuActivate(); return; }
+      if (x > W/2 - 110 && x < W/2 + 110 && y > MENU_Y[i] - 10 && y < MENU_Y[i] + 6){ menuSel = i; menuActivate(); return; }
     return;
   }
   if (state === 'select' || state === 'levels'){
@@ -1202,10 +1562,54 @@ cv.addEventListener('pointerdown', e => {
       }
     return;
   }
+  if (state === 'login'){
+    if (x > W/2 - 70 && x < W/2 + 70 && y > 164 && y < 184){ doLogin(); return; }
+    if (y > 194 && y < 206){ goToNewAccount(); return; }
+    return;
+  }
+  if (state === 'newaccount'){
+    if (x > W/2 - 70 && x < W/2 + 70 && y > 150 && y < 170){ doCreateAccount(); return; }
+    if (y > 180 && y < 192){ blurFields(); state = 'login'; return; }
+    return;
+  }
+  if (state === 'admin'){
+    const rows = adminRows(), top = 50, maxH = 224 - top, rowH = Math.min(26, Math.floor(maxH / rows.length));
+    for (let i = 0; i < rows.length; i++){
+      const nm = rows[i], ry = top + i*rowH;
+      if (y < ry || y > ry + rowH - 4) continue;
+      if (nm !== '__changepw__' && nm !== '__back__'){
+        if (x > 322 && x < 352){ adminSel = i; resetAccountProgress(nm); return; }
+        if (x > 356 && x < 386){ adminSel = i; deleteAccount(nm); return; }
+      }
+      if (x > 50 && x < 430){ adminSel = i; confirm(); return; }
+    }
+    return;
+  }
+  if (state === 'options'){
+    for (let i = 0; i < OPT_ROWS.length; i++){
+      const cy = 90 + i*26;
+      if (x > 110 && x < 370 && y > cy - 12 && y < cy + 10){
+        optSel = i;
+        if (i < 3){ optChange(x > 240 ? 1 : -1); } else confirm();
+        return;
+      }
+    }
+    return;
+  }
+  if (state === 'pause'){
+    for (let i = 0; i < PAUSE_MENU.length; i++){
+      const cy = 116 + i*34;
+      if (x > W/2 - 90 && x < W/2 + 90 && y > cy - 13 && y < cy + 11){ pauseSel = i; confirm(); return; }
+    }
+    return;
+  }
   confirm();
 });
-
-loadLevel(0); loop();
+ 
+loadLevel(0);
+loop();
+if (!CURRENT){ state = 'login'; setTimeout(() => nameInput.focus(), 60); }
 </script>
 </body>
 </html>
+ 
